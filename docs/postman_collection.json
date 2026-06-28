@@ -1,0 +1,273 @@
+{
+  "info": {
+    "name": "HealthAI Assistant API",
+    "_postman_id": "healthai-api-collection",
+    "description": "API endpoints for HealthAI Assistant. Import this file into Postman or Thunder Client. Set the collection variables (app_id, js_key, base_url) before running.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "parse_url", "value": "https://parseapi.back4app.com", "type": "string" },
+    { "key": "base_url", "value": "http://localhost:3000", "type": "string" },
+    { "key": "app_id", "value": "YOUR_BACK4APP_APP_ID", "type": "string" },
+    { "key": "js_key", "value": "YOUR_BACK4APP_JS_KEY", "type": "string" },
+    { "key": "session_token", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Parse-Application-Id", "value": "{{app_id}}" },
+              { "key": "X-Parse-Javascript-Key", "value": "{{js_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{parse_url}}/1/users", "host": ["{{parse_url}}"], "path": ["1", "users"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"testuser1\",\n  \"password\": \"pass123\",\n  \"email\": \"test@example.com\",\n  \"allergies\": [],\n  \"conditions\": [],\n  \"medications\": []\n}"
+            }
+          }
+        },
+        {
+          "name": "Login User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.sessionToken) {",
+                  "  pm.collectionVariables.set('session_token', json.sessionToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Parse-Application-Id", "value": "{{app_id}}" },
+              { "key": "X-Parse-Javascript-Key", "value": "{{js_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{parse_url}}/1/login", "host": ["{{parse_url}}"], "path": ["1", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"testuser1\",\n  \"password\": \"pass123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Logout User",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Parse-Application-Id", "value": "{{app_id}}" },
+              { "key": "X-Parse-Javascript-Key", "value": "{{js_key}}" },
+              { "key": "X-Parse-Session-Token", "value": "{{session_token}}" }
+            ],
+            "url": { "raw": "{{parse_url}}/1/logout", "host": ["{{parse_url}}"], "path": ["1", "logout"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health Logs",
+      "item": [
+        {
+          "name": "Create Health Log",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Parse-Application-Id", "value": "{{app_id}}" },
+              { "key": "X-Parse-Javascript-Key", "value": "{{js_key}}" },
+              { "key": "X-Parse-Session-Token", "value": "{{session_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{parse_url}}/1/classes/HealthLog", "host": ["{{parse_url}}"], "path": ["1", "classes", "HealthLog"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": \"headache and fatigue\",\n  \"severity\": \"medium\",\n  \"notes\": \"Started after lunch\",\n  \"vitals\": {\n    \"heartRate\": 82,\n    \"bloodPressure\": \"120/80\",\n    \"temperature\": 99.1\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Health Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-Parse-Application-Id", "value": "{{app_id}}" },
+              { "key": "X-Parse-Javascript-Key", "value": "{{js_key}}" },
+              { "key": "X-Parse-Session-Token", "value": "{{session_token}}" }
+            ],
+            "url": {
+              "raw": "{{parse_url}}/1/classes/HealthLog?order=-createdAt&limit=50",
+              "host": ["{{parse_url}}"],
+              "path": ["1", "classes", "HealthLog"],
+              "query": [
+                { "key": "order", "value": "-createdAt" },
+                { "key": "limit", "value": "50" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Health Log",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "X-Parse-Application-Id", "value": "{{app_id}}" },
+              { "key": "X-Parse-Javascript-Key", "value": "{{js_key}}" },
+              { "key": "X-Parse-Session-Token", "value": "{{session_token}}" }
+            ],
+            "url": {
+              "raw": "{{parse_url}}/1/classes/HealthLog/REPLACE_WITH_OBJECT_ID",
+              "host": ["{{parse_url}}"],
+              "path": ["1", "classes", "HealthLog", "REPLACE_WITH_OBJECT_ID"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Conversations",
+      "item": [
+        {
+          "name": "Save Conversation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Parse-Application-Id", "value": "{{app_id}}" },
+              { "key": "X-Parse-Javascript-Key", "value": "{{js_key}}" },
+              { "key": "X-Parse-Session-Token", "value": "{{session_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{parse_url}}/1/classes/Conversation", "host": ["{{parse_url}}"], "path": ["1", "classes", "Conversation"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Headache symptoms\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"I have a headache\" },\n    { \"role\": \"assistant\", \"content\": \"How long have you had it?\" }\n  ],\n  \"lastMessage\": \"How long have you had it?\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Conversations",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-Parse-Application-Id", "value": "{{app_id}}" },
+              { "key": "X-Parse-Javascript-Key", "value": "{{js_key}}" },
+              { "key": "X-Parse-Session-Token", "value": "{{session_token}}" }
+            ],
+            "url": {
+              "raw": "{{parse_url}}/1/classes/Conversation?order=-createdAt&limit=20",
+              "host": ["{{parse_url}}"],
+              "path": ["1", "classes", "Conversation"],
+              "query": [
+                { "key": "order", "value": "-createdAt" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Conversation",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "X-Parse-Application-Id", "value": "{{app_id}}" },
+              { "key": "X-Parse-Javascript-Key", "value": "{{js_key}}" },
+              { "key": "X-Parse-Session-Token", "value": "{{session_token}}" }
+            ],
+            "url": {
+              "raw": "{{parse_url}}/1/classes/Conversation/REPLACE_WITH_OBJECT_ID",
+              "host": ["{{parse_url}}"],
+              "path": ["1", "classes", "Conversation", "REPLACE_WITH_OBJECT_ID"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI Routes",
+      "item": [
+        {
+          "name": "AI Chat",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/chat", "host": ["{{base_url}}"], "path": ["api", "chat"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"I have a mild headache\" }\n  ],\n  \"userProfile\": {\n    \"allergies\": [\"penicillin\"],\n    \"conditions\": [\"asthma\"],\n    \"medications\": [\"inhaler\"],\n    \"age\": 28,\n    \"bloodType\": \"O+\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "AI Chat - Emergency",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/chat", "host": ["{{base_url}}"], "path": ["api", "chat"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"I have chest pain and can't breathe\" }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "AI Chat - Empty Messages (Error)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/chat", "host": ["{{base_url}}"], "path": ["api", "chat"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messages\": []\n}"
+            }
+          }
+        },
+        {
+          "name": "AI Health Insights",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/health-insights", "host": ["{{base_url}}"], "path": ["api", "health-insights"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"logs\": [\n    {\n      \"symptoms\": \"headache and fatigue\",\n      \"severity\": \"medium\",\n      \"notes\": \"After lunch\",\n      \"createdAt\": \"2026-06-25T10:00:00.000Z\",\n      \"vitals\": { \"heartRate\": 82, \"temperature\": 99.1 }\n    },\n    {\n      \"symptoms\": \"mild back pain\",\n      \"severity\": \"low\",\n      \"notes\": \"\",\n      \"createdAt\": \"2026-06-24T08:00:00.000Z\",\n      \"vitals\": {}\n    }\n  ],\n  \"profile\": {\n    \"age\": 28,\n    \"bloodType\": \"O+\",\n    \"allergies\": [],\n    \"conditions\": [],\n    \"medications\": []\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "AI Health Insights - Empty Logs",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/health-insights", "host": ["{{base_url}}"], "path": ["api", "health-insights"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"logs\": [],\n  \"profile\": null\n}"
+            }
+          }
+        },
+        {
+          "name": "AI Health Insights - Missing Logs (Error)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/health-insights", "host": ["{{base_url}}"], "path": ["api", "health-insights"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"profile\": {}\n}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

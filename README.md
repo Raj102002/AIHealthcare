@@ -1,4 +1,6 @@
-# HealthAI Assistant — Week 2
+# HealthAI Assistant
+
+> **Demo video:** _[Link to be added after recording]_
 
 An AI-powered healthcare assistant built with Next.js, Back4App (Parse Server), and Groq
 (llama-3.3-70b-versatile). Users can register, log symptoms, track vitals, and chat with
@@ -164,6 +166,45 @@ The app is deployed on **Netlify** using `@netlify/plugin-nextjs`.
 
 GitHub Actions runs lint + build on every push and pull request to `main`
 (see `.github/workflows/ci.yml`). Secrets must be added in GitHub repository settings.
+
+---
+
+## AI Features
+
+### Feature 1 — Conversational Symptom Checker (chat)
+- **Route:** `POST /api/chat`
+- **Model:** Groq `llama-3.3-70b-versatile`
+- **What it does:** Streaming AI chat that takes the user's full health profile (allergies,
+  conditions, medications, age, blood type) as context and provides general wellness guidance.
+  The system prompt instructs the model to ask follow-up questions before giving advice and
+  to always recommend consulting a doctor.
+- **Emergency detection:** Client-side regex scan fires before the AI response — if a
+  red-flag keyword (chest pain, stroke, suicidal ideation, etc.) is detected, an emergency
+  banner with 911 / 988 / Poison Control numbers appears immediately.
+
+### Feature 2 — AI Health Log Analysis (insights)
+- **Route:** `POST /api/health-insights`
+- **Model:** Groq `llama-3.3-70b-versatile`
+- **What it does:** Analyzes the user's stored health logs (up to 20) and generates a
+  structured wellness report covering: symptom patterns, notable observations, wellness
+  recommendations, and flags for when to seek care. Accessible from the dashboard via the
+  "Analyze My Logs" button.
+
+### Error Handling
+- `400` returned for missing/invalid request bodies
+- `429` detected and surfaced as a user-friendly "Rate limit reached" message
+- `500` with plain error message for unexpected failures
+- Loading spinners shown during all AI operations
+- Stream abort on component unmount prevents memory leaks
+
+---
+
+## API & Testing Documentation
+
+- Full endpoint reference: [`docs/api.md`](docs/api.md)
+- Postman collection (importable): [`docs/postman_collection.json`](docs/postman_collection.json)
+- Test cases: [`docs/test_cases.md`](docs/test_cases.md)
+- Cost analysis: [`COST_ANALYSIS.md`](COST_ANALYSIS.md)
 
 ---
 
