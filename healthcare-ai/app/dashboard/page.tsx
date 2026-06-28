@@ -25,6 +25,7 @@ import {
   Parse,
 } from "@/lib/parse-client";
 import HealthLogForm from "@/components/HealthLogForm";
+import HealthInsights from "@/components/HealthInsights";
 import type { UserProfile } from "@/types/health";
 
 interface LogEntry {
@@ -255,6 +256,11 @@ export default function DashboardPage() {
             </div>
           </div>
         ) : null}
+
+        {/* AI Health Insights */}
+        <div className="mb-4">
+          <HealthInsights logs={logs} profile={profile} />
+        </div>
 
         {/* Log new entry */}
         <div className="mb-6">
