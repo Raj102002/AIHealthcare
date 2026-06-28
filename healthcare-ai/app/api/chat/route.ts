@@ -105,6 +105,17 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error: unknown) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "status" in error &&
+      (error as { status: number }).status === 429
+    ) {
+      return NextResponse.json(
+        { error: "Rate limit reached. Please wait a moment and try again." },
+        { status: 429 }
+      );
+    }
     const message =
       error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
