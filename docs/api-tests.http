@@ -1,0 +1,279 @@
+# HealthAI Assistant — API Tests
+# Extension: REST Client (Huachao Mao) — free, works in VS Code
+# Usage: click "Send Request" above any request block
+#
+# SETUP: fill in your values in the @variables below
+
+@parse_url = https://parseapi.back4app.com
+@base_url = http://localhost:3000
+@app_id = YOUR_BACK4APP_APP_ID
+@js_key = YOUR_BACK4APP_JS_KEY
+
+# After running "Login User", copy sessionToken from the response
+# and paste it here:
+@session_token = PASTE_SESSION_TOKEN_HERE
+
+
+### ─────────────────────────────────────────
+### AUTH
+### ─────────────────────────────────────────
+
+### TC-AUTH-01: Register User (expect 201)
+POST {{parse_url}}/1/users
+X-Parse-Application-Id: {{app_id}}
+X-Parse-Javascript-Key: {{js_key}}
+Content-Type: application/json
+
+{
+  "username": "testuser1",
+  "password": "pass123",
+  "email": "test@example.com",
+  "allergies": [],
+  "conditions": [],
+  "medications": []
+}
+
+###
+
+### TC-AUTH-02: Register with duplicate username (expect 400, code 202)
+POST {{parse_url}}/1/users
+X-Parse-Application-Id: {{app_id}}
+X-Parse-Javascript-Key: {{js_key}}
+Content-Type: application/json
+
+{
+  "username": "testuser1",
+  "password": "pass123",
+  "email": "test@example.com"
+}
+
+###
+
+### TC-AUTH-04: Login with valid credentials (expect 200 + sessionToken)
+POST {{parse_url}}/1/login
+X-Parse-Application-Id: {{app_id}}
+X-Parse-Javascript-Key: {{js_key}}
+Content-Type: application/json
+
+{
+  "username": "testuser1",
+  "password": "pass123"
+}
+
+###
+
+### TC-AUTH-05: Login with wrong password (expect 404, code 101)
+POST {{parse_url}}/1/login
+X-Parse-Application-Id: {{app_id}}
+X-Parse-Javascript-Key: {{js_key}}
+Content-Type: application/json
+
+{
+  "username": "testuser1",
+  "password": "wrongpassword"
+}
+
+###
+
+### TC-AUTH-06: Login with non-existent user (expect 404, code 101)
+POST {{parse_url}}/1/login
+X-Parse-Application-Id: {{app_id}}
+X-Parse-Javascript-Key: {{js_key}}
+Content-Type: application/json
+
+{
+  "username": "doesnotexist",
+  "password": "pass123"
+}
+
+###
+
+
+### ─────────────────────────────────────────
+### HEALTH LOGS
+### ─────────────────────────────────────────
+
+### TC-LOG-01: Create health log (authenticated) (expect 201)
+POST {{parse_url}}/1/classes/HealthLog
+X-Parse-Application-Id: {{app_id}}
+X-Parse-Javascript-Key: {{js_key}}
+X-Parse-Session-Token: {{session_token}}
+Content-Type: application/json
+
+{
+  "symptoms": "headache and fatigue",
+  "severity": "medium",
+  "notes": "Started after lunch",
+  "vitals": {
+    "heartRate": 82,
+    "bloodPressure": "120/80",
+    "temperature": 99.1
+  }
+}
+
+###
+
+### TC-LOG-02: Create health log (unauthenticated) (expect 403)
+POST {{parse_url}}/1/classes/HealthLog
+X-Parse-Application-Id: {{app_id}}
+X-Parse-Javascript-Key: {{js_key}}
+Content-Type: application/json
+
+{
+  "symptoms": "headache",
+  "severity": "low"
+}
+
+###
+
+### TC-LOG-03: Get health logs (authenticated) (expect 200 with results array)
+GET {{parse_url}}/1/classes/HealthLog?order=-createdAt&limit=50
+X-Parse-Application-Id: {{app_id}}
+X-Parse-Javascript-Key: {{js_key}}
+X-Parse-Session-Token: {{session_token}}
+
+###
+
+### TC-LOG-05: Delete health log (replace OBJECT_ID with id from TC-LOG-01)
+DELETE {{parse_url}}/1/classes/HealthLog/REPLACE_WITH_OBJECT_ID
+X-Parse-Application-Id: {{app_id}}
+X-Parse-Javascript-Key: {{js_key}}
+X-Parse-Session-Token: {{session_token}}
+
+###
+
+
+### ─────────────────────────────────────────
+### CONVERSATIONS
+### ─────────────────────────────────────────
+
+### TC-CONV-01: Save conversation (expect 201)
+POST {{parse_url}}/1/classes/Conversation
+X-Parse-Application-Id: {{app_id}}
+X-Parse-Javascript-Key: {{js_key}}
+X-Parse-Session-Token: {{session_token}}
+Content-Type: application/json
+
+{
+  "title": "Headache symptoms",
+  "messages": [
+    { "role": "user", "content": "I have a headache" },
+    { "role": "assistant", "content": "How long have you had it?" }
+  ],
+  "lastMessage": "How long have you had it?"
+}
+
+###
+
+### TC-CONV-02: Get conversations (expect 200 with results array)
+GET {{parse_url}}/1/classes/Conversation?order=-createdAt&limit=20
+X-Parse-Application-Id: {{app_id}}
+X-Parse-Javascript-Key: {{js_key}}
+X-Parse-Session-Token: {{session_token}}
+
+###
+
+### TC-CONV-03: Delete conversation (replace OBJECT_ID with id from TC-CONV-01)
+DELETE {{parse_url}}/1/classes/Conversation/REPLACE_WITH_OBJECT_ID
+X-Parse-Application-Id: {{app_id}}
+X-Parse-Javascript-Key: {{js_key}}
+X-Parse-Session-Token: {{session_token}}
+
+###
+
+
+### ─────────────────────────────────────────
+### AI ROUTES (run `npm run dev` first)
+### ─────────────────────────────────────────
+
+### TC-CHAT-01: Valid chat message (expect 200 streaming text)
+POST {{base_url}}/api/chat
+Content-Type: application/json
+
+{
+  "messages": [
+    { "role": "user", "content": "I have a mild headache" }
+  ],
+  "userProfile": {
+    "allergies": ["penicillin"],
+    "conditions": ["asthma"],
+    "medications": ["inhaler"],
+    "age": 28,
+    "bloodType": "O+"
+  }
+}
+
+###
+
+### TC-CHAT-03: Emergency keyword (expect 200, response starts with [EMERGENCY])
+POST {{base_url}}/api/chat
+Content-Type: application/json
+
+{
+  "messages": [
+    { "role": "user", "content": "I have chest pain and can't breathe" }
+  ]
+}
+
+###
+
+### TC-CHAT-04: Empty messages array (expect 400)
+POST {{base_url}}/api/chat
+Content-Type: application/json
+
+{
+  "messages": []
+}
+
+###
+
+### TC-INSIGHTS-01: Health insights with logs (expect 200 with insights text)
+POST {{base_url}}/api/health-insights
+Content-Type: application/json
+
+{
+  "logs": [
+    {
+      "symptoms": "headache and fatigue",
+      "severity": "medium",
+      "notes": "After lunch",
+      "createdAt": "2026-06-25T10:00:00.000Z",
+      "vitals": { "heartRate": 82, "temperature": 99.1 }
+    },
+    {
+      "symptoms": "mild back pain",
+      "severity": "low",
+      "notes": "",
+      "createdAt": "2026-06-24T08:00:00.000Z",
+      "vitals": {}
+    }
+  ],
+  "profile": {
+    "age": 28,
+    "bloodType": "O+",
+    "allergies": [],
+    "conditions": [],
+    "medications": []
+  }
+}
+
+###
+
+### TC-INSIGHTS-02: Empty logs (expect 200 with "no logs" message)
+POST {{base_url}}/api/health-insights
+Content-Type: application/json
+
+{
+  "logs": [],
+  "profile": null
+}
+
+###
+
+### TC-INSIGHTS-03: Missing logs field (expect 400)
+POST {{base_url}}/api/health-insights
+Content-Type: application/json
+
+{
+  "profile": {}
+}
