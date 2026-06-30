@@ -51,7 +51,7 @@ export async function logoutUser() {
 
 export function getCurrentUser(): Parse.User | null {
   initializeParse();
-  return Parse.User.current();
+  return Parse.User.current() ?? null;
 }
 
 export function getUserProfile(): UserProfile | null {
