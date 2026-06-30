@@ -66,11 +66,12 @@ export function getUserProfile(): UserProfile | null {
     medications: user.get("medications") || [],
     bloodType: user.get("bloodType"),
     age: user.get("age"),
+    preferredLanguage: user.get("preferredLanguage"),
   };
 }
 
 export async function updateUserProfile(
-  data: Partial<Pick<UserProfile, "allergies" | "conditions" | "medications" | "bloodType" | "age">>
+  data: Partial<Pick<UserProfile, "allergies" | "conditions" | "medications" | "bloodType" | "age" | "preferredLanguage">>
 ) {
   initializeParse();
   const user = Parse.User.current();

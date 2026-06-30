@@ -32,6 +32,7 @@ export interface UserProfile {
   medications: string[];
   bloodType?: string;
   age?: number;
+  preferredLanguage?: string;
 }
 
 export interface Conversation {

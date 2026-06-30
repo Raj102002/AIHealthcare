@@ -78,6 +78,7 @@ export default function UserProfilePanel({ profile, onUpdated }: Props) {
     medications: profile.medications || [],
     age: profile.age?.toString() || "",
     bloodType: profile.bloodType || "",
+    preferredLanguage: profile.preferredLanguage || "",
   });
 
   async function handleSave() {
@@ -89,6 +90,7 @@ export default function UserProfilePanel({ profile, onUpdated }: Props) {
         medications: local.medications,
         age: local.age ? Number(local.age) : undefined,
         bloodType: local.bloodType || undefined,
+        preferredLanguage: local.preferredLanguage || undefined,
       });
       onUpdated({
         allergies: local.allergies,
@@ -96,6 +98,7 @@ export default function UserProfilePanel({ profile, onUpdated }: Props) {
         medications: local.medications,
         age: local.age ? Number(local.age) : undefined,
         bloodType: local.bloodType,
+        preferredLanguage: local.preferredLanguage,
       });
       setOpen(false);
     } catch (err) {
@@ -144,6 +147,36 @@ export default function UserProfilePanel({ profile, onUpdated }: Props) {
                 ))}
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Preferred Language</label>
+            <select
+              value={local.preferredLanguage}
+              onChange={(e) => setLocal({ ...local, preferredLanguage: e.target.value })}
+              className="w-full text-xs px-2 py-1 border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white"
+            >
+              <option value="">Auto-detect</option>
+              {[
+                ["en", "English"],
+                ["hi", "Hindi (हिन्दी)"],
+                ["es", "Spanish (Español)"],
+                ["fr", "French (Français)"],
+                ["de", "German (Deutsch)"],
+                ["zh", "Chinese (中文)"],
+                ["ar", "Arabic (العربية)"],
+                ["pt", "Portuguese (Português)"],
+                ["ru", "Russian (Русский)"],
+                ["ja", "Japanese (日本語)"],
+                ["ko", "Korean (한국어)"],
+                ["ta", "Tamil (தமிழ்)"],
+                ["te", "Telugu (తెలుగు)"],
+                ["bn", "Bengali (বাংলা)"],
+                ["ur", "Urdu (اردو)"],
+              ].map(([code, label]) => (
+                <option key={code} value={code}>{label}</option>
+              ))}
+            </select>
           </div>
 
           <TagInput

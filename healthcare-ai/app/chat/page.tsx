@@ -108,6 +108,7 @@ export default function ChatPage() {
                 medications: profile.medications,
                 age: profile.age,
                 bloodType: profile.bloodType,
+                preferredLanguage: profile.preferredLanguage,
               }
             : undefined,
         }),

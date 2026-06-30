@@ -5,12 +5,31 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
+const LANGUAGE_NAMES: Record<string, string> = {
+  en: "English",
+  hi: "Hindi",
+  es: "Spanish",
+  fr: "French",
+  de: "German",
+  zh: "Chinese",
+  ar: "Arabic",
+  pt: "Portuguese",
+  ru: "Russian",
+  ja: "Japanese",
+  ko: "Korean",
+  ta: "Tamil",
+  te: "Telugu",
+  bn: "Bengali",
+  ur: "Urdu",
+};
+
 function buildSystemPrompt(profile?: {
   allergies?: string[];
   conditions?: string[];
   medications?: string[];
   age?: number;
   bloodType?: string;
+  preferredLanguage?: string;
 }): string {
   let context = "";
   if (profile) {
@@ -24,10 +43,14 @@ function buildSystemPrompt(profile?: {
       context += `\n- Current medications: ${profile.medications.join(", ")}`;
   }
 
+  const languageName = profile?.preferredLanguage
+    ? LANGUAGE_NAMES[profile.preferredLanguage] ?? profile.preferredLanguage
+    : null;
+
   return `You are a compassionate and knowledgeable healthcare assistant. Your role is to provide general health information, wellness guidance, and support — NOT to diagnose or prescribe.
 
 ${context ? `USER HEALTH PROFILE:${context}\n` : ""}
-
+${languageName ? `LANGUAGE: Always respond in ${languageName}. Do not switch to any other language regardless of what language the system prompt uses.\n` : "LANGUAGE: Detect the language of the user's message and always reply in that same language.\n"}
 CORE RULES — follow every single one:
 1. NEVER diagnose medical conditions. Always recommend consulting a qualified healthcare professional.
 2. NEVER prescribe medications or specific dosages.
@@ -60,6 +83,7 @@ export async function POST(request: NextRequest) {
         medications?: string[];
         age?: number;
         bloodType?: string;
+        preferredLanguage?: string;
       };
     };
 
