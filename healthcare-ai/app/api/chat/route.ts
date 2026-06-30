@@ -1,9 +1,7 @@
 import Groq from "groq-sdk";
 import { NextRequest, NextResponse } from "next/server";
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
+const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const LANGUAGE_NAMES: Record<string, string> = {
   en: "English",
@@ -96,7 +94,7 @@ export async function POST(request: NextRequest) {
 
     const systemPrompt = buildSystemPrompt(userProfile);
 
-    const stream = await groq.chat.completions.create({
+    const stream = await getGroq().chat.completions.create({
       model: "llama-3.3-70b-versatile",
       max_tokens: 1024,
       messages: [
