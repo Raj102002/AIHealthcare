@@ -1,6 +1,11 @@
 # HealthAI Assistant
 
-> **Demo video:** _[Link to be added after recording]_
+**Name:** Rajamanendra Surisetty
+**Z-Number:** Z23879546
+**FAU Email:** rsurisetty2025@fau.edu
+
+**Live App:** [https://alhealthcare.netlify.app/chat](https://alhealthcare.netlify.app/chat)
+**Demo Video:** [https://youtu.be/WCrvW_IBQvQ](https://youtu.be/WCrvW_IBQvQ)
 
 An AI-powered healthcare assistant built with Next.js, Back4App (Parse Server), and Groq
 (llama-3.3-70b-versatile). Users can register, log symptoms, track vitals, and chat with
@@ -36,6 +41,18 @@ Browser (Next.js 16 / React 19 / Tailwind CSS 4)
                               Back4App (Parse Server)          Groq API
                               User, HealthLog, Conversation    llama-3.3-70b
 ```
+
+---
+
+## Technology Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js 16 (App Router), React 19, Tailwind CSS 4, TypeScript |
+| Backend / Database | Back4App (Parse Server) — auth, data storage, ACL-based access control |
+| AI | Groq API (`llama-3.3-70b-versatile`), streamed via Next.js API routes |
+| Deployment | Netlify (`@netlify/plugin-nextjs`) |
+| CI/CD | GitHub Actions (lint + build on push/PR) |
 
 ---
 
@@ -147,6 +164,7 @@ Open [http://localhost:3000](http://localhost:3000).
 ## Deployment
 
 The app is deployed on **Netlify** using `@netlify/plugin-nextjs`.
+**Live URL:** [https://alhealthcare.netlify.app](https://alhealthcare.netlify.app)
 
 ### Steps to deploy
 
@@ -198,6 +216,12 @@ GitHub Actions runs lint + build on every push and pull request to `main`
 - Stream abort on component unmount prevents memory leaks
 
 ---
+
+## Design & Planning Documentation
+
+- Wireframes: [`docs/wireframes.md`](docs/wireframes.md)
+- Database schema: see [Data Model / Schema](#data-model--schema) above
+- Architecture notes: see [Architecture](#architecture) above
 
 ## API & Testing Documentation
 
