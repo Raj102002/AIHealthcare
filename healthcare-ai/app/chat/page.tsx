@@ -53,6 +53,7 @@ export default function ChatPage() {
       router.replace("/");
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- profile read depends on browser-only Parse SDK state, must stay effect-gated
     setProfile(getUserProfile());
   }, [router]);
 
