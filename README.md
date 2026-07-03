@@ -53,6 +53,7 @@ Browser (Next.js 16 / React 19 / Tailwind CSS 4)
 | AI | Groq API (`llama-3.3-70b-versatile`), streamed via Next.js API routes |
 | Deployment | Netlify (`@netlify/plugin-nextjs`) |
 | CI/CD | GitHub Actions (lint + build on push/PR) |
+| API Testing | Postman (collection in `docs/postman_collection.json`), VS Code REST Client (`docs/api-tests.http`) |
 
 ---
 
