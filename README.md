@@ -220,9 +220,67 @@ GitHub Actions runs lint + build on every push and pull request to `main`
 
 ## Design & Planning Documentation
 
-- Wireframes: [`docs/wireframes.md`](docs/wireframes.md)
+- Wireframes: [`docs/wireframes.md`](docs/wireframes.md) (full version — reproduced below)
 - Database schema: see [Data Model / Schema](#data-model--schema) above
 - Architecture notes: see [Architecture](#architecture) above
+
+### Wireframes
+
+**Auth Screen (`/`)** — login / register
+
+```
+┌──────────────────────────────────────────┐
+│              [♥]  HealthAI Assistant      │
+│         Personalized health guidance      │
+│                powered by AI              │
+│  ┌──────────────────────────────────────┐ │
+│  │ ⚕️ For informational purposes only.   │ │
+│  └──────────────────────────────────────┘ │
+│  [ Login ] [ Register ]  <- mode toggle   │
+│  Username  [______________________]       │
+│  Email     [______________________]       │  (register mode only)
+│  Password  [______________________] [👁]  │
+│           [   Submit / Loading…   ]       │
+└──────────────────────────────────────────┘
+```
+
+**Chat Screen (`/chat`)** — AI conversation
+
+```
+┌──────────────────────────────────────────┐
+│ HealthAI  [Profile] [Dashboard] [Logout]  │
+├──────────────────────────────────────────┤
+│ 🚨 EMERGENCY BANNER (conditional)         │
+│    911 / 988 / Poison Control links       │
+├──────────────────────────────────────────┤
+│   [AI] Hi, how are you feeling today?     │
+│                  How can I help? [User]   │
+│   [AI] Streaming response…                │
+├──────────────────────────────────────────┤
+│ [ Message input________________ ] [Send]  │
+│                        [Save Chat]        │
+└──────────────────────────────────────────┘
+```
+
+**Dashboard Screen (`/dashboard`)** — logs, vitals, AI insights
+
+```
+┌──────────────────────────────────────────┐
+│ HealthAI  [Chat] [Profile] [Logout]       │
+├──────────────────────────────────────────┤
+│  Stats:  [Logs: n] [Vitals tracked] [...] │
+├──────────────────────────────────────────┤
+│  [+ Log Symptom / Vital]  (expandable)    │
+├──────────────────────────────────────────┤
+│  [Analyze My Logs] -> AI Health Insights  │
+├──────────────────────────────────────────┤
+│  Health Logs                [🗑 delete]   │
+├──────────────────────────────────────────┤
+│  Saved Conversations         [🗑 delete]  │
+└──────────────────────────────────────────┘
+```
+
+Flow: `/` (auth) → `/chat` (default landing after login) → `/dashboard` (logs + insights + history). See [`docs/wireframes.md`](docs/wireframes.md) for full-size versions and component notes.
 
 ## API & Testing Documentation
 
