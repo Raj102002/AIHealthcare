@@ -11,8 +11,18 @@ import {
   Loader2,
   Send,
   Database,
+  Volume2,
 } from "lucide-react";
-import { getCurrentUser, logoutUser, initializeParse } from "@/lib/parse-client";
+import {
+  getCurrentUser,
+  getUserProfile,
+  logoutUser,
+  initializeParse,
+} from "@/lib/parse-client";
+import MicButton from "@/components/MicButton";
+import VoiceOrb from "@/components/VoiceOrb";
+import { useSpeechOutput } from "@/hooks/useSpeechOutput";
+import type { UserProfile } from "@/types/health";
 
 interface Source {
   region: string;
@@ -39,10 +49,13 @@ const EXAMPLE_QUESTIONS = [
 export default function LymeDataPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [entries, setEntries] = useState<QAEntry[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const voiceTriggeredRef = useRef(false);
+  const { isSpeaking, speak } = useSpeechOutput();
 
   useEffect(() => {
     initializeParse();
@@ -51,6 +64,7 @@ export default function LymeDataPage() {
       return;
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- auth check depends on browser-only Parse SDK state, must stay effect-gated
+    setProfile(getUserProfile());
     setReady(true);
   }, [router]);
 
@@ -95,6 +109,10 @@ export default function LymeDataPage() {
           sources: data.sources || [],
         },
       ]);
+
+      if (voiceTriggeredRef.current && data.answer) {
+        speak(data.answer, profile?.preferredLanguage);
+      }
     } catch {
       setEntries((prev) => [
         ...prev,
@@ -108,7 +126,13 @@ export default function LymeDataPage() {
       ]);
     } finally {
       setLoading(false);
+      voiceTriggeredRef.current = false;
     }
+  }
+
+  function handleVoiceTranscript(text: string) {
+    voiceTriggeredRef.current = true;
+    ask(text);
   }
 
   async function handleLogout() {
@@ -201,9 +225,19 @@ export default function LymeDataPage() {
                   </div>
                 ) : (
                   <div className="bg-white border border-slate-100 shadow-sm rounded-2xl rounded-tl-sm px-4 py-3">
-                    <p className="text-sm text-slate-800 whitespace-pre-wrap">
-                      {entry.answer}
-                    </p>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm text-slate-800 whitespace-pre-wrap">
+                        {entry.answer}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => speak(entry.answer, profile?.preferredLanguage)}
+                        title="Read aloud"
+                        className="text-slate-300 hover:text-teal-600 transition-colors shrink-0"
+                      >
+                        <Volume2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                     {entry.sources.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-slate-100">
                         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
@@ -237,9 +271,10 @@ export default function LymeDataPage() {
           </div>
         </div>
 
-        <div className="bg-amber-50 border-t border-amber-100 px-4 py-1.5 text-center text-xs text-amber-700">
-          ⚕️ Aggregate surveillance statistics only — not a diagnosis. Consult a
-          healthcare professional about your own symptoms.
+        <div className="bg-amber-50 border-t border-amber-100 px-4 py-1.5 flex items-center justify-center gap-3 text-center text-xs text-amber-700">
+          <span>⚕️ Aggregate surveillance statistics only — not a diagnosis. Consult a
+          healthcare professional about your own symptoms.</span>
+          <VoiceOrb active={isSpeaking} />
         </div>
 
         <div className="bg-white border-t border-slate-200 px-4 py-3">
@@ -257,6 +292,11 @@ export default function LymeDataPage() {
               rows={1}
               className="flex-1 resize-none px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition max-h-32 scrollbar-thin"
               style={{ minHeight: "44px" }}
+            />
+            <MicButton
+              language={profile?.preferredLanguage}
+              onTranscript={handleVoiceTranscript}
+              disabled={loading}
             />
             <button
               onClick={() => ask(question)}

@@ -25,6 +25,9 @@ import EmergencyBanner from "@/components/EmergencyBanner";
 import ChatMessage from "@/components/ChatMessage";
 import HealthLogForm from "@/components/HealthLogForm";
 import UserProfilePanel from "@/components/UserProfilePanel";
+import MicButton from "@/components/MicButton";
+import VoiceOrb from "@/components/VoiceOrb";
+import { useSpeechOutput } from "@/hooks/useSpeechOutput";
 import type { Message, UserProfile } from "@/types/health";
 
 const WELCOME: Message = {
@@ -46,6 +49,8 @@ export default function ChatPage() {
   const [conversationSaved, setConversationSaved] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const voiceTriggeredRef = useRef(false);
+  const { isSpeaking, speak } = useSpeechOutput();
 
   useEffect(() => {
     initializeParse();
@@ -62,8 +67,8 @@ export default function ChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = useCallback(async () => {
-    const text = input.trim();
+  const sendMessage = useCallback(async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim();
     if (!text || streaming) return;
 
     const isEmergency = detectEmergency(text);
@@ -144,6 +149,10 @@ export default function ChatPage() {
           );
         }
       }
+
+      if (voiceTriggeredRef.current && full) {
+        speak(full.replace(/^\[EMERGENCY\]\n?/i, "").trim(), profile?.preferredLanguage);
+      }
     } catch (err: unknown) {
       if ((err as Error).name !== "AbortError") {
         setMessages((prev) =>
@@ -161,8 +170,14 @@ export default function ChatPage() {
     } finally {
       setStreaming(false);
       abortRef.current = null;
+      voiceTriggeredRef.current = false;
     }
-  }, [input, streaming, messages, profile]);
+  }, [input, streaming, messages, profile, speak]);
+
+  function handleVoiceTranscript(text: string) {
+    voiceTriggeredRef.current = true;
+    sendMessage(text);
+  }
 
   async function handleSaveConversation() {
     try {
@@ -287,7 +302,11 @@ export default function ChatPage() {
           <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-4">
             <div className="max-w-2xl mx-auto">
               {messages.map((msg) => (
-                <ChatMessage key={msg.id} message={msg} />
+                <ChatMessage
+                  key={msg.id}
+                  message={msg}
+                  onSpeak={(text) => speak(text, profile?.preferredLanguage)}
+                />
               ))}
               {streaming && messages[messages.length - 1]?.content === "" && (
                 <div className="flex gap-3 mb-4">
@@ -304,8 +323,9 @@ export default function ChatPage() {
           </div>
 
           {/* Disclaimer bar */}
-          <div className="bg-amber-50 border-t border-amber-100 px-4 py-1.5 text-center text-xs text-amber-700">
-            ⚕️ This AI provides general information only — not a substitute for professional medical advice.
+          <div className="bg-amber-50 border-t border-amber-100 px-4 py-1.5 flex items-center justify-center gap-3 text-center text-xs text-amber-700">
+            <span>⚕️ This AI provides general information only — not a substitute for professional medical advice.</span>
+            <VoiceOrb active={isSpeaking} />
           </div>
 
           {/* Input area */}
@@ -327,6 +347,11 @@ export default function ChatPage() {
                   style={{ minHeight: "44px" }}
                 />
                 <div className="flex gap-1.5 shrink-0">
+                  <MicButton
+                    language={profile?.preferredLanguage}
+                    onTranscript={handleVoiceTranscript}
+                    disabled={streaming}
+                  />
                   {streaming && (
                     <button
                       onClick={() => abortRef.current?.abort()}
@@ -337,7 +362,7 @@ export default function ChatPage() {
                     </button>
                   )}
                   <button
-                    onClick={sendMessage}
+                    onClick={() => sendMessage()}
                     disabled={!input.trim() || streaming}
                     className="p-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:bg-teal-200 text-white transition-colors"
                     title="Send"

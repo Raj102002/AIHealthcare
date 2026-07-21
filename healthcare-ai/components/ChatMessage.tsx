@@ -1,17 +1,18 @@
 "use client";
 
-import { User, Bot, AlertTriangle } from "lucide-react";
+import { User, Bot, AlertTriangle, Volume2 } from "lucide-react";
 import type { Message } from "@/types/health";
 
 interface Props {
   message: Message;
+  onSpeak?: (text: string) => void;
 }
 
 function formatContent(content: string): string {
   return content.replace(/^\[EMERGENCY\]\n?/i, "").trim();
 }
 
-export default function ChatMessage({ message }: Props) {
+export default function ChatMessage({ message, onSpeak }: Props) {
   const isUser = message.role === "user";
   const displayContent = formatContent(message.content);
   const time = new Date(message.timestamp).toLocaleTimeString([], {
@@ -55,7 +56,19 @@ export default function ChatMessage({ message }: Props) {
           {displayContent}
         </div>
 
-        <span className="text-xs text-slate-400">{time}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-400">{time}</span>
+          {!isUser && onSpeak && displayContent && (
+            <button
+              type="button"
+              onClick={() => onSpeak(displayContent)}
+              title="Read aloud"
+              className="text-slate-300 hover:text-teal-600 transition-colors"
+            >
+              <Volume2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
