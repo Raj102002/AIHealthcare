@@ -5,6 +5,9 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  # NEXT_PUBLIC_* vars are meant to be inlined into the client bundle by Next.js --
+  # that's not a leak, so tell Netlify's secret scanner to skip these two.
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_BACK4APP_APP_ID,NEXT_PUBLIC_BACK4APP_JS_KEY"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
