@@ -22468,5 +22468,47 @@
     "source": "CDC Lyme Disease Surveillance — Cases by Race, 2010-2023",
     "region": "White",
     "years_covered": "2010-2023"
+  },
+  {
+    "id": "info:about",
+    "text": "Lyme disease is a bacterial infection spread to people through the bite of infected blacklegged ticks. In the United States, it is caused by the bacterium Borrelia burgdorferi and, rarely, Borrelia mayonii. It is the most common vector-borne illness reported in the United States and is most frequently reported in the Northeast, mid-Atlantic, and upper-Midwest regions, where infected ticks are most common in forested and grassy areas.",
+    "source": "CDC — About Lyme Disease (https://www.cdc.gov/lyme/about/index.html)",
+    "region": "About Lyme Disease",
+    "years_covered": "general information, not case-specific"
+  },
+  {
+    "id": "info:transmission",
+    "text": "Lyme disease is spread to people through the bite of an infected blacklegged tick (also called a deer tick). In most cases, a tick needs to be attached for more than 24 hours before it can transmit the Lyme disease bacteria, so finding and removing an attached tick promptly can reduce the risk of infection.",
+    "source": "CDC — How Lyme Disease Spreads (https://www.cdc.gov/lyme/causes/index.html)",
+    "region": "How Lyme Disease Spreads",
+    "years_covered": "general information, not case-specific"
+  },
+  {
+    "id": "info:symptoms",
+    "text": "Typical early signs and symptoms of Lyme disease include fever, chills, headache, fatigue, muscle and joint aches, swollen lymph nodes, and an expanding skin rash called erythema migrans, which can look like a \"bull's-eye.\" If left untreated, the infection can spread from the site of the bite to other parts of the body, producing a wider range of symptoms including facial palsy, arthritis (especially in the knees), heart rhythm irregularities, and nervous system problems.",
+    "source": "CDC — Signs and Symptoms of Lyme Disease (https://www.cdc.gov/lyme/signs-symptoms/index.html)",
+    "region": "Signs and Symptoms of Lyme Disease",
+    "years_covered": "general information, not case-specific"
+  },
+  {
+    "id": "info:diagnosis",
+    "text": "CDC recommends a standard two-step (two-tiered) blood testing process to help diagnose Lyme disease: a first-tier enzyme-linked immunoassay (ELISA) test, followed by a second, more specific Western blot test only if the first result is positive or equivocal. If the first test is negative, no further testing is recommended. These tests detect antibodies to the Lyme disease bacteria, so results can be falsely negative in the first few weeks after infection, before the body has produced enough antibodies.",
+    "source": "CDC — Testing and Diagnosis for Lyme Disease (https://www.cdc.gov/lyme/diagnosis-testing/index.html)",
+    "region": "Testing and Diagnosis for Lyme Disease",
+    "years_covered": "general information, not case-specific"
+  },
+  {
+    "id": "info:treatment",
+    "text": "Lyme disease is generally treated with a course of oral antibiotics. Early diagnosis and proper antibiotic treatment are important and can help prevent more serious symptoms from developing. Commonly used antibiotics include doxycycline, amoxicillin, and cefuroxime; the specific choice and duration depend on the patient's age, symptoms, and stage of disease. Most people treated in the early stages recover quickly and completely.",
+    "source": "CDC — Clinical Care of Lyme Disease (https://www.cdc.gov/lyme/treatment/index.html)",
+    "region": "Clinical Care of Lyme Disease",
+    "years_covered": "general information, not case-specific"
+  },
+  {
+    "id": "info:prevention",
+    "text": "The best way to prevent Lyme disease is to avoid tick bites. CDC recommends using EPA-registered insect repellents (such as those containing DEET, picaridin, IR3535, oil of lemon eucalyptus, para-menthane-diol, or 2-undecanone), wearing long sleeves and pants or clothing pre-treated with 0.5% permethrin, and checking your body for ticks after spending time outdoors. Ticks should be removed as soon as possible, since delaying removal increases the risk of infection.",
+    "source": "CDC — Preventing Lyme Disease (https://www.cdc.gov/lyme/prevention/index.html)",
+    "region": "Preventing Lyme Disease",
+    "years_covered": "general information, not case-specific"
   }
 ]

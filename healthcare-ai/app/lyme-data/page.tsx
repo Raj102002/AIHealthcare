@@ -30,9 +30,10 @@ interface QAEntry {
 }
 
 const EXAMPLE_QUESTIONS = [
+  "What is Lyme disease and how does it spread?",
   "How many Lyme disease cases were reported in Autauga County, Alabama?",
+  "What are the symptoms of Lyme disease?",
   "Which states report the most Lyme disease cases?",
-  "Which racial/ethnic groups are most affected by Lyme disease?",
 ];
 
 export default function LymeDataPage() {
@@ -167,9 +168,10 @@ export default function LymeDataPage() {
               </h1>
             </div>
             <p className="text-sm text-slate-500 mb-4">
-              Ask questions about CDC Lyme disease surveillance data — case counts by
-              county (2001–2023) and by race (2010–2023). Answers cite the underlying
-              data and are not a diagnosis.
+              Ask general questions about Lyme disease (symptoms, transmission,
+              prevention) or CDC surveillance data — case counts by county
+              (2001–2023) and by race (2010–2023). Answers cite the underlying
+              source and are not a diagnosis.
             </p>
 
             {entries.length === 0 && (
