@@ -3,7 +3,14 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   serverExternalPackages: ["@anthropic-ai/sdk", "@xenova/transformers"],
   outputFileTracingIncludes: {
-    "/api/rag-chat": ["./data/**", "./models/**"],
+    // onnxruntime-node's native addon dlopen()s libonnxruntime.so.*.so at runtime
+    // (not a JS require()), which Next's file tracer can't see statically, so it
+    // has to be force-included or Netlify's Linux function throws ERR_DLOPEN_FAILED.
+    "/api/rag-chat": [
+      "./data/**",
+      "./models/**",
+      "./node_modules/onnxruntime-node/bin/napi-v3/linux/x64/**",
+    ],
   },
   outputFileTracingExcludes: {
     // sharp is @xenova/transformers' optional dependency for image inputs (vision
