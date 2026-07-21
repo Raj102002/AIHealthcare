@@ -12,6 +12,7 @@ import {
   Activity,
   Calendar,
   Trash2,
+  Database,
 } from "lucide-react";
 import {
   getCurrentUser,
@@ -163,6 +164,13 @@ export default function DashboardPage() {
           >
             <MessageSquare className="w-4 h-4" />
             <span className="hidden sm:inline">Chat</span>
+          </Link>
+          <Link
+            href="/lyme-data"
+            className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-teal-600 px-3 py-1.5 rounded-lg hover:bg-teal-50 transition-colors"
+          >
+            <Database className="w-4 h-4" />
+            <span className="hidden sm:inline">Lyme Data</span>
           </Link>
           <button
             onClick={handleLogout}
