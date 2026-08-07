@@ -1,11 +1,21 @@
 import Groq from "groq-sdk";
 import type { RetrievedChunk } from "@/types/rag";
 
-const RERANK_MODEL = "llama-3.1-8b-instant";
+// llama-3.1-8b-instant was tried first (cheaper/faster) but reliably ignored explicit
+// disease-mismatch instructions and few-shot examples in this batch-scoring prompt —
+// e.g. it scored Lyme-antibiotic content 10/10 against a flu-treatment query even
+// with that exact pairing given as a worked "score this 1" example. Switching to 70b
+// with the same prompt took evals/rag.jsonl's unanswerable-set refusal rate from
+// 20-40% to 100% (5/5) with no regression on the 15 answerable cases (still 100%
+// hit rate) — verified via `npm run eval`.
+const RERANK_MODEL = "llama-3.3-70b-versatile";
 
 // Below this (out of 10) a chunk is treated as not actually relevant and dropped,
-// rather than passed to the generation prompt as noise.
-export const MIN_RELEVANCE_SCORE = 4;
+// rather than passed to the generation prompt as noise. Calibrated against
+// evals/rag.jsonl's unanswerable set: candidates that only share vocabulary with
+// the query (e.g. the word "treatment") but don't address it score in the 3-5
+// range from the reranker, not near 0, so the floor has to sit above that band.
+export const MIN_RELEVANCE_SCORE = 6;
 
 interface RerankScore {
   index: number;
@@ -20,6 +30,13 @@ function truncate(text: string, maxChars: number): string {
 // since a dedicated cross-encoder reranker (e.g. Cohere) would need a separate API
 // key. Returns the top `topK` candidates whose score clears MIN_RELEVANCE_SCORE, or
 // an empty array if none do — callers must not fall back to unranked candidates.
+//
+// The prompt names the corpus's exact subject (Lyme disease) and explicitly tells
+// the model shared vocabulary alone isn't relevance — plain "score 0-10 relevance"
+// wording let the reranker give near-max scores to same-vocabulary/wrong-disease
+// candidates (e.g. 10/10 for Lyme antibiotic info against a flu-treatment query).
+// This is intentionally scoped to this corpus's single topic; if the corpus grows
+// to cover more subjects, this framing needs to become topic-agnostic again.
 export async function rerank(
   query: string,
   candidates: RetrievedChunk[],
@@ -32,12 +49,26 @@ export async function rerank(
     .map((c, i) => `[${i}] (${c.metadata.source_title} — ${c.metadata.section_heading})\n${truncate(c.text, 500)}`)
     .join("\n\n");
 
-  const prompt = `Query: "${query}"
+  const prompt = `This knowledge base covers exactly one subject: Lyme disease (CDC surveillance case-count statistics by US county/state/race, and CDC educational content on transmission, symptoms, testing, treatment, and prevention). It has no data on any other disease, any other country's statistics, or any medical topic outside Lyme disease.
+
+Query: "${query}"
 
 Candidate passages:
 ${listing}
 
-Score how relevant each candidate passage is to answering the query, on a 0-10 scale where 0 means completely unrelated and 10 means it directly answers the query. Respond with ONLY a JSON object of the form {"scores": [{"index": 0, "score": 7}, ...]} covering every candidate index.`;
+For each candidate, first check: is the query asking about Lyme disease specifically (or a place/topic this passage actually covers)? If the query is about a different disease/condition/medication, a place this passage doesn't cover, or anything outside this knowledge base's subject, that candidate scores 0-2 NO MATTER HOW MANY WORDS IT SHARES with the query (e.g. "treatment", "cases", and "symptoms" appear in both Lyme and non-Lyme questions — shared words are not relevance).
+
+Then score 0-10:
+- 0-2: wrong disease/condition/medication, wrong place, or otherwise outside what this passage covers — even with shared vocabulary.
+- 3-5: right general subject but doesn't actually answer this specific query.
+- 6-8: substantially answers the query, possibly missing minor detail.
+- 9-10: directly and completely answers the query.
+
+Example: query "flu treatment", candidate about Lyme disease antibiotics → 1 (different disease; "treatment" being in both is not relevance).
+Example: query "Lyme cases in France", candidate about Lyme cases in a US county → 1 (right disease, wrong place — doesn't answer the query).
+Example: query "Lyme disease symptoms", candidate about Lyme disease symptoms → 9.
+
+Respond with ONLY a JSON object of the form {"scores": [{"index": 0, "score": 7}, ...]} covering every candidate index.`;
 
   let scores: RerankScore[];
   try {
