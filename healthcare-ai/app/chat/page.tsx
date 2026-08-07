@@ -11,7 +11,7 @@ import {
   Loader2,
   RefreshCw,
   Trash2,
-  Database,
+  Headphones,
 } from "lucide-react";
 import {
   getCurrentUser,
@@ -21,13 +21,16 @@ import {
   initializeParse,
 } from "@/lib/parse-client";
 import { detectEmergency } from "@/lib/emergency-detector";
+import { extractCompleteSentences } from "@/lib/speech-sanitize";
 import EmergencyBanner from "@/components/EmergencyBanner";
 import ChatMessage from "@/components/ChatMessage";
 import HealthLogForm from "@/components/HealthLogForm";
 import UserProfilePanel from "@/components/UserProfilePanel";
 import MicButton from "@/components/MicButton";
 import VoiceOrb from "@/components/VoiceOrb";
+import VoiceDisclosure from "@/components/VoiceDisclosure";
 import { useSpeechOutput } from "@/hooks/useSpeechOutput";
+import { useVoiceInput, type VoiceInputError } from "@/hooks/useVoiceInput";
 import type { Message, UserProfile } from "@/types/health";
 
 const WELCOME: Message = {
@@ -38,6 +41,8 @@ const WELCOME: Message = {
   timestamp: new Date().toISOString(),
 };
 
+const VOICE_DISCLOSURE_KEY = "healthai_voice_disclosure_seen";
+
 export default function ChatPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -47,10 +52,35 @@ export default function ChatPage() {
   const [showEmergency, setShowEmergency] = useState(false);
   const [lastSymptoms, setLastSymptoms] = useState("");
   const [conversationSaved, setConversationSaved] = useState(false);
+  const [conversationMode, setConversationMode] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [showVoiceDisclosure, setShowVoiceDisclosure] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const voiceTriggeredRef = useRef(false);
-  const { isSpeaking, speak } = useSpeechOutput();
+  const spokenUpToRef = useRef(0);
+  const conversationModeRef = useRef(false);
+  const disclosureSeenRef = useRef(true);
+  const wasSpeakingRef = useRef(false);
+
+  const { isSpeaking, beginStream, enqueueSentence, speak, stop: stopSpeaking, unlock } = useSpeechOutput();
+
+  const handleVoiceTranscript = useCallback((text: string) => {
+    voiceTriggeredRef.current = true;
+    setInput(text);
+    inputRef.current?.focus();
+  }, []);
+
+  const handleVoiceError = useCallback((error: VoiceInputError) => {
+    setVoiceError(error.message);
+  }, []);
+
+  const { state: voiceState, level: voiceLevel, start: startVoice, stop: stopVoice } = useVoiceInput({
+    language: profile?.preferredLanguage,
+    onTranscript: handleVoiceTranscript,
+    onError: handleVoiceError,
+  });
 
   useEffect(() => {
     initializeParse();
@@ -64,12 +94,42 @@ export default function ChatPage() {
   }, [router]);
 
   useEffect(() => {
+    disclosureSeenRef.current = typeof window !== "undefined" && localStorage.getItem(VOICE_DISCLOSURE_KEY) === "true";
+  }, []);
+
+  useEffect(() => {
+    conversationModeRef.current = conversationMode;
+  }, [conversationMode]);
+
+  useEffect(() => {
+    if (!voiceError) return;
+    const t = setTimeout(() => setVoiceError(null), 6000);
+    return () => clearTimeout(t);
+  }, [voiceError]);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Hands-free conversation mode: once the assistant finishes speaking, start
+  // listening again automatically instead of making the user re-tap the mic. The
+  // transcript still lands in the composer for review — this only skips the
+  // re-tap, it never skips the review-before-send step.
+  useEffect(() => {
+    if (wasSpeakingRef.current && !isSpeaking && conversationModeRef.current && voiceState === "idle" && !streaming) {
+      startVoice();
+    }
+    wasSpeakingRef.current = isSpeaking;
+  }, [isSpeaking, streaming, voiceState, startVoice]);
 
   const sendMessage = useCallback(async (overrideText?: string) => {
     const text = (overrideText ?? input).trim();
     if (!text || streaming) return;
+
+    const wasVoiceTriggered = voiceTriggeredRef.current;
+    voiceTriggeredRef.current = false;
+    spokenUpToRef.current = 0;
+    if (wasVoiceTriggered) beginStream(profile?.preferredLanguage);
 
     const isEmergency = detectEmergency(text);
     if (isEmergency) setShowEmergency(true);
@@ -126,6 +186,20 @@ export default function ChatPage() {
         throw new Error(`API error: ${res.status}`);
       }
 
+      const sourcesHeader = res.headers.get("X-RAG-Sources");
+      if (sourcesHeader) {
+        try {
+          const sources = JSON.parse(atob(sourcesHeader)) as Message["sources"];
+          if (sources?.length) {
+            setMessages((prev) =>
+              prev.map((m) => (m.id === assistantId ? { ...m, sources } : m))
+            );
+          }
+        } catch {
+          // Malformed/missing sources header shouldn't block the answer itself.
+        }
+      }
+
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
       let full = "";
@@ -147,11 +221,20 @@ export default function ChatPage() {
                 : m
             )
           );
+
+          if (wasVoiceTriggered) {
+            const { sentences, consumedUpTo } = extractCompleteSentences(full, spokenUpToRef.current);
+            if (sentences.length > 0) {
+              spokenUpToRef.current = consumedUpTo;
+              for (const s of sentences) enqueueSentence(s);
+            }
+          }
         }
       }
 
-      if (voiceTriggeredRef.current && full) {
-        speak(full.replace(/^\[EMERGENCY\]\n?/i, "").trim(), profile?.preferredLanguage);
+      if (wasVoiceTriggered) {
+        const trailing = full.slice(spokenUpToRef.current).trim();
+        if (trailing) enqueueSentence(trailing);
       }
     } catch (err: unknown) {
       if ((err as Error).name !== "AbortError") {
@@ -170,14 +253,22 @@ export default function ChatPage() {
     } finally {
       setStreaming(false);
       abortRef.current = null;
-      voiceTriggeredRef.current = false;
     }
-  }, [input, streaming, messages, profile, speak]);
+  }, [input, streaming, messages, profile, beginStream, enqueueSentence]);
 
-  function handleVoiceTranscript(text: string) {
-    voiceTriggeredRef.current = true;
-    sendMessage(text);
-  }
+  const handleMicStart = useCallback(() => {
+    unlock();
+    if (!disclosureSeenRef.current) {
+      setShowVoiceDisclosure(true);
+      disclosureSeenRef.current = true;
+      if (typeof window !== "undefined") localStorage.setItem(VOICE_DISCLOSURE_KEY, "true");
+    }
+    startVoice();
+  }, [unlock, startVoice]);
+
+  const handleBargeIn = useCallback(() => {
+    stopSpeaking();
+  }, [stopSpeaking]);
 
   async function handleSaveConversation() {
     try {
@@ -216,10 +307,27 @@ export default function ChatPage() {
     );
   }
 
+  const voiceStatus = isSpeaking
+    ? "Speaking response"
+    : voiceState === "listening"
+    ? "Listening"
+    : voiceState === "transcribing"
+    ? "Transcribing your question"
+    : streaming
+    ? "Thinking"
+    : "";
+
   return (
     <div className="h-screen flex flex-col bg-slate-50">
+      <div className="sr-only" role="status" aria-live="polite">
+        {voiceStatus}
+      </div>
+
       {showEmergency && (
         <EmergencyBanner onDismiss={() => setShowEmergency(false)} />
+      )}
+      {showVoiceDisclosure && (
+        <VoiceDisclosure onDismiss={() => setShowVoiceDisclosure(false)} />
       )}
 
       {/* Top nav */}
@@ -232,13 +340,6 @@ export default function ChatPage() {
         </div>
 
         <div className="flex items-center gap-1">
-          <Link
-            href="/lyme-data"
-            className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-teal-600 px-3 py-1.5 rounded-lg hover:bg-teal-50 transition-colors"
-          >
-            <Database className="w-4 h-4" />
-            <span className="hidden sm:inline">Lyme Data</span>
-          </Link>
           <Link
             href="/dashboard"
             className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-teal-600 px-3 py-1.5 rounded-lg hover:bg-teal-50 transition-colors"
@@ -325,14 +426,21 @@ export default function ChatPage() {
           {/* Disclaimer bar */}
           <div className="bg-amber-50 border-t border-amber-100 px-4 py-1.5 flex items-center justify-center gap-3 text-center text-xs text-amber-700">
             <span>⚕️ This AI provides general information only — not a substitute for professional medical advice.</span>
-            <VoiceOrb active={isSpeaking} />
+            <VoiceOrb active={isSpeaking} label={voiceStatus || "Speaking..."} />
           </div>
+
+          {voiceError && (
+            <div className="bg-red-50 border-t border-red-100 px-4 py-1.5 text-center text-xs text-red-700" role="alert">
+              {voiceError}
+            </div>
+          )}
 
           {/* Input area */}
           <div className="bg-white border-t border-slate-200 px-4 py-3">
             <div className="max-w-2xl mx-auto">
               <div className="flex gap-2 items-end">
                 <textarea
+                  ref={inputRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -347,9 +455,28 @@ export default function ChatPage() {
                   style={{ minHeight: "44px" }}
                 />
                 <div className="flex gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setConversationMode((v) => !v)}
+                    disabled={streaming}
+                    title={conversationMode ? "Turn off hands-free conversation mode" : "Turn on hands-free conversation mode"}
+                    aria-label="Toggle hands-free conversation mode"
+                    aria-pressed={conversationMode}
+                    className={`p-2.5 rounded-xl transition-colors shrink-0 ${
+                      conversationMode
+                        ? "bg-teal-100 text-teal-700 hover:bg-teal-200"
+                        : "bg-slate-100 hover:bg-slate-200 text-slate-600 disabled:opacity-50"
+                    }`}
+                  >
+                    <Headphones className="w-4 h-4" />
+                  </button>
                   <MicButton
-                    language={profile?.preferredLanguage}
-                    onTranscript={handleVoiceTranscript}
+                    state={voiceState}
+                    level={voiceLevel}
+                    isSpeaking={isSpeaking}
+                    onStart={handleMicStart}
+                    onStop={stopVoice}
+                    onBargeIn={handleBargeIn}
                     disabled={streaming}
                   />
                   {streaming && (

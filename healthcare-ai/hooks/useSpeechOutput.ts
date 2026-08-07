@@ -2,24 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BCP47_LOCALE } from "@/lib/language-codes";
+import { sanitizeForSpeech, splitIntoSentences } from "@/lib/speech-sanitize";
 
-// Chrome can silently stop firing events / cut off utterances longer than ~15s,
-// so long answers are split into sentence-sized chunks and queued individually.
-function splitIntoSpeakableChunks(text: string): string[] {
-  const sentences = text.match(/[^.!?]+[.!?]+|\S+$/g) ?? [text];
-  const chunks: string[] = [];
-  let current = "";
-  for (const sentence of sentences) {
-    if ((current + sentence).length > 200 && current) {
-      chunks.push(current.trim());
-      current = sentence;
-    } else {
-      current += sentence;
-    }
-  }
-  if (current.trim()) chunks.push(current.trim());
-  return chunks;
-}
+// A single silent sample, used to unlock <audio> playback on iOS Safari when
+// called from the same user gesture that starts recording.
+const SILENT_WAV =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
 
 function getVoiceForLocale(locale: string): SpeechSynthesisVoice | undefined {
   const voices = window.speechSynthesis.getVoices();
@@ -31,51 +19,146 @@ function getVoiceForLocale(locale: string): SpeechSynthesisVoice | undefined {
 
 export function useSpeechOutput() {
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
   const queueRef = useRef<string[]>([]);
+  const playingRef = useRef(false);
+  const localeRef = useRef("en-US");
+  // Flips to false after a failed Groq TTS call so the rest of the turn falls
+  // back to the browser directly instead of retrying (and failing) every sentence.
+  const useGroqRef = useRef(true);
+  const activeStopRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    // Some browsers populate the voice list asynchronously.
-    window.speechSynthesis.getVoices();
+    if (typeof window === "undefined") return;
+    audioElRef.current = new Audio();
+    if (window.speechSynthesis) window.speechSynthesis.getVoices();
   }, []);
 
-  const speakNextRef = useRef<(locale: string) => void>(() => {});
-  useEffect(() => {
-    speakNextRef.current = (locale: string) => {
-      const next = queueRef.current.shift();
-      if (!next) {
-        setIsSpeaking(false);
+  const unlock = useCallback(() => {
+    const el = audioElRef.current;
+    if (!el) return;
+    el.src = SILENT_WAV;
+    el.play().catch(() => {});
+  }, []);
+
+  const speakGroq = useCallback(async (text: string): Promise<void> => {
+    const res = await fetch("/api/speak", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) throw new Error("TTS request failed");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const el = audioElRef.current;
+    if (!el) throw new Error("Audio element not ready");
+    el.src = url;
+
+    await new Promise<void>((resolve, reject) => {
+      activeStopRef.current = () => {
+        el.pause();
+        resolve();
+      };
+      el.onended = () => {
+        URL.revokeObjectURL(url);
+        activeStopRef.current = null;
+        resolve();
+      };
+      el.onerror = () => {
+        URL.revokeObjectURL(url);
+        activeStopRef.current = null;
+        reject(new Error("Playback failed"));
+      };
+      el.play().catch(reject);
+    });
+  }, []);
+
+  const speakBrowser = useCallback((text: string, locale: string): Promise<void> => {
+    return new Promise((resolve) => {
+      if (typeof window === "undefined" || !window.speechSynthesis) {
+        resolve();
         return;
       }
-
-      const utterance = new SpeechSynthesisUtterance(next);
+      const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = locale;
       const voice = getVoiceForLocale(locale);
       if (voice) utterance.voice = voice;
 
-      utterance.onend = () => speakNextRef.current(locale);
-      utterance.onerror = () => speakNextRef.current(locale);
-
+      activeStopRef.current = () => {
+        window.speechSynthesis.cancel();
+        resolve();
+      };
+      utterance.onend = () => {
+        activeStopRef.current = null;
+        resolve();
+      };
+      utterance.onerror = () => {
+        activeStopRef.current = null;
+        resolve();
+      };
       window.speechSynthesis.speak(utterance);
-    };
-  });
-
-  const speak = useCallback((text: string, languageCode?: string) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    const locale = (languageCode && BCP47_LOCALE[languageCode]) || "en-US";
-
-    window.speechSynthesis.cancel();
-    queueRef.current = splitIntoSpeakableChunks(text);
-    setIsSpeaking(true);
-    speakNextRef.current(locale);
+    });
   }, []);
 
+  const processQueue = useCallback(async () => {
+    if (playingRef.current) return;
+    playingRef.current = true;
+    setIsSpeaking(true);
+
+    while (playingRef.current && queueRef.current.length > 0) {
+      const sentence = queueRef.current.shift();
+      if (!sentence) continue;
+      try {
+        if (useGroqRef.current) {
+          await speakGroq(sentence);
+        } else {
+          await speakBrowser(sentence, localeRef.current);
+        }
+      } catch {
+        useGroqRef.current = false;
+        if (playingRef.current) await speakBrowser(sentence, localeRef.current);
+      }
+    }
+
+    playingRef.current = false;
+    setIsSpeaking(false);
+  }, [speakGroq, speakBrowser]);
+
+  const beginStream = useCallback((languageCode?: string) => {
+    localeRef.current = (languageCode && BCP47_LOCALE[languageCode]) || "en-US";
+    useGroqRef.current = true;
+  }, []);
+
+  const enqueueSentence = useCallback(
+    (rawText: string) => {
+      const clean = sanitizeForSpeech(rawText);
+      if (!clean) return;
+      queueRef.current.push(clean);
+      void processQueue();
+    },
+    [processQueue]
+  );
+
+  // For speaking an already-complete message (e.g. the "read aloud" button).
+  const speak = useCallback(
+    (rawText: string, languageCode?: string) => {
+      beginStream(languageCode);
+      const clean = sanitizeForSpeech(rawText);
+      if (!clean) return;
+      const sentences = splitIntoSentences(clean);
+      queueRef.current.push(...(sentences.length ? sentences : [clean]));
+      void processQueue();
+    },
+    [beginStream, processQueue]
+  );
+
   const stop = useCallback(() => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
     queueRef.current = [];
-    window.speechSynthesis.cancel();
+    playingRef.current = false;
+    activeStopRef.current?.();
+    activeStopRef.current = null;
     setIsSpeaking(false);
   }, []);
 
-  return { isSpeaking, speak, stop };
+  return { isSpeaking, speak, beginStream, enqueueSentence, stop, unlock };
 }
