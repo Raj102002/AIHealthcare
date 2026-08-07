@@ -56,6 +56,35 @@ export default function ChatMessage({ message, onSpeak }: Props) {
           {displayContent}
         </div>
 
+        {!isUser && message.sources && message.sources.length > 0 && (
+          <div className="w-full pt-1 pb-0.5">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+              Sources
+            </p>
+            <ul className="space-y-0.5">
+              {message.sources.map((s) => (
+                <li key={s.number} className="text-xs text-slate-500">
+                  <span className="text-slate-400">[{s.number}]</span>{" "}
+                  {s.source_url ? (
+                    <a
+                      href={s.source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-teal-600 hover:underline"
+                    >
+                      {s.source_title} — {s.section_heading}
+                    </a>
+                  ) : (
+                    <span>
+                      {s.source_title} — {s.section_heading}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-400">{time}</span>
           {!isUser && onSpeak && displayContent && (

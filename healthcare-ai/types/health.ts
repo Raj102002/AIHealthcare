@@ -4,6 +4,7 @@ export interface Message {
   content: string;
   timestamp: string;
   isEmergency?: boolean;
+  sources?: import("./rag").CitedSource[];
 }
 
 export interface Vitals {
