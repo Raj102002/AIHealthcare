@@ -6,9 +6,10 @@
 // chunk used by the BM25 keyword index at request time — that file is written
 // unconditionally, independent of whether Upstash is reachable, since the keyword
 // index has no dependency on the remote vector store.
-import "dotenv/config";
+import { config } from "dotenv";
 import fs from "node:fs";
 import path from "node:path";
+config({ path: path.join(process.cwd(), ".env.local") });
 import { parseMarkdownDoc, recursiveSplit, hashChunk } from "@/lib/chunking";
 import { buildTabularChunks } from "@/lib/tabular-chunks";
 import { getVectorIndex } from "@/lib/vector-client";

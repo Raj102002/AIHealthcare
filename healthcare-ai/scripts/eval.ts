@@ -3,9 +3,10 @@
 // hit rate (is a gold chunk in the reranked top-5?) and refusal rate on the
 // unanswerable set (did retrieval correctly return zero chunks?), then prints a
 // before/after table against the old (now-removed) single-endpoint pipeline.
-import "dotenv/config";
+import { config } from "dotenv";
 import fs from "node:fs";
 import path from "node:path";
+config({ path: path.join(process.cwd(), ".env.local") });
 import Groq from "groq-sdk";
 import { retrieve } from "@/lib/retrieval";
 import { rewriteQuery, type ChatTurn } from "@/lib/query-rewrite";
@@ -52,7 +53,8 @@ async function main() {
       const retrievedIds = retrieved.map((r) => r.id);
       const hit = c.gold_chunk_ids.some((id) => retrievedIds.includes(id));
       results.push({ id: c.id, type: c.type, hit, retrievedIds });
-      console.log(`  ${c.id} [${c.type}] ${hit ? "HIT" : "MISS"} — got [${retrievedIds.join(", ")}]`);
+      const withScores = retrieved.map((r) => `${r.id} (${r.score.toFixed(1)})`).join(", ");
+      console.log(`  ${c.id} [${c.type}] ${hit ? "HIT" : "MISS"} — got [${withScores}]`);
     } catch (err) {
       console.error(`  ${c.id} [${c.type}] ERROR — ${(err as Error).message}`);
       results.push({ id: c.id, type: c.type, hit: false, retrievedIds: [] });
