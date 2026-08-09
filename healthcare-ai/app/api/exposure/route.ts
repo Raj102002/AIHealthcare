@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadCorpusChunks } from "@/lib/corpus-lookup";
+import { checkRateLimit, clientKeyFrom } from "@/lib/rate-limit";
+import { withMetrics } from "@/lib/metrics";
+import { exposureRequestSchema, formatZodError } from "@/lib/validation";
 
 // Exposure reconstruction (ClearSignal build spec, section 6.5) — deliberately
 // deterministic and Groq-free. This never asks "were you bitten by a tick"
@@ -9,20 +12,25 @@ import { loadCorpusChunks } from "@/lib/corpus-lookup";
 // documented exposure OPPORTUNITY, never as "you were exposed." A low-incidence
 // county is never framed as ruling anything out.
 
-interface MonthActivity {
-  month: string;
-  year: number;
-  activities: string[];
-}
+const RATE_LIMIT = 30;
+const RATE_WINDOW_MS = 10 * 60 * 1000;
 
-export async function POST(request: NextRequest) {
+export const POST = withMetrics("exposure", async (request: NextRequest) => {
+  const { allowed, retryAfterSeconds } = checkRateLimit(`exposure:${clientKeyFrom(request)}`, RATE_LIMIT, RATE_WINDOW_MS);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Rate limit reached. Please wait a moment and try again." },
+      { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } }
+    );
+  }
+
   try {
-    const body = await request.json();
-    const { state, county, months } = body as { state?: string; county?: string; months?: MonthActivity[] };
-
-    if (!state?.trim() || !county?.trim()) {
-      return NextResponse.json({ error: "state and county are required" }, { status: 400 });
+    const rawBody = await request.json();
+    const parsed = exposureRequestSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
     }
+    const { state, county, months } = parsed.data;
 
     const corpus = loadCorpusChunks();
     const countyId = `county:${state.trim()}:${county.trim()}`;
@@ -70,4 +78,4 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

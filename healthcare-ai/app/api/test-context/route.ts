@@ -4,6 +4,8 @@ import { retrieve } from "@/lib/retrieval";
 import { buildContext } from "@/lib/generation";
 import { computeTestTiming, shouldSuggestRetest } from "@/lib/test-timing";
 import { checkRateLimit, clientKeyFrom } from "@/lib/rate-limit";
+import { withMetrics } from "@/lib/metrics";
+import { testContextRequestSchema, formatZodError } from "@/lib/validation";
 
 const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -17,7 +19,7 @@ function formatDays(n: number): string {
 // The narrative here is built from a fixed template + retrieved facts, never
 // generated freehand — the date arithmetic and the "should you retest" logic
 // must be exact every time, not phrased differently by an LLM each call.
-export async function POST(request: NextRequest) {
+export const POST = withMetrics("test-context", async (request: NextRequest) => {
   const { allowed, retryAfterSeconds } = checkRateLimit(`test-context:${clientKeyFrom(request)}`, RATE_LIMIT, RATE_WINDOW_MS);
   if (!allowed) {
     return NextResponse.json(
@@ -27,12 +29,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
-    const { symptomOnsetDate, testDate } = body as { symptomOnsetDate?: string; testDate?: string };
-
-    if (!symptomOnsetDate || !testDate) {
-      return NextResponse.json({ error: "symptomOnsetDate and testDate are required" }, { status: 400 });
+    const rawBody = await request.json();
+    const parsed = testContextRequestSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
     }
+    const { symptomOnsetDate, testDate } = parsed.data;
     const onset = new Date(symptomOnsetDate);
     const test = new Date(testDate);
     if (Number.isNaN(onset.getTime()) || Number.isNaN(test.getTime())) {
@@ -104,4 +106,4 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

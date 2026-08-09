@@ -1,5 +1,6 @@
 import Groq from "groq-sdk";
 import type { RetrievedChunk } from "@/types/rag";
+import { recordTokenUsage } from "@/lib/metrics";
 
 // llama-3.1-8b-instant was tried first (cheaper/faster) but reliably ignored explicit
 // disease-mismatch instructions and few-shot examples in this batch-scoring prompt —
@@ -79,6 +80,9 @@ Respond with ONLY a JSON object of the form {"scores": [{"index": 0, "score": 7}
       response_format: { type: "json_object" },
       messages: [{ role: "user", content: prompt }],
     });
+    if (completion.usage) {
+      recordTokenUsage(completion.usage.prompt_tokens ?? 0, completion.usage.completion_tokens ?? 0);
+    }
     const raw = completion.choices[0]?.message?.content ?? "{}";
     const parsed = JSON.parse(raw) as { scores?: unknown };
     if (!Array.isArray(parsed.scores)) throw new Error("malformed rerank response");

@@ -19,6 +19,8 @@ import {
   Scale,
   Users,
   Trash2,
+  Sparkles,
+  Send,
 } from "lucide-react";
 import { getCurrentUser, logoutUser, initializeParse } from "@/lib/parse-client";
 import LowStimToggle from "@/components/LowStimToggle";
@@ -51,7 +53,7 @@ import type {
 } from "@/types/journal";
 import { FUNCTION_DOMAIN_LABELS, ANCHOR_TYPE_LABELS } from "@/types/journal";
 
-type Tab = "symptoms" | "function" | "anchors" | "encounters" | "rash" | "exposure";
+type Tab = "symptoms" | "function" | "anchors" | "encounters" | "rash" | "exposure" | "ask";
 
 const TABS: { id: Tab; label: string; icon: typeof Activity }[] = [
   { id: "symptoms", label: "Symptoms", icon: Activity },
@@ -60,6 +62,7 @@ const TABS: { id: Tab; label: string; icon: typeof Activity }[] = [
   { id: "encounters", label: "Encounters", icon: Stethoscope },
   { id: "rash", label: "Rash Photos", icon: Camera },
   { id: "exposure", label: "Exposure", icon: Compass },
+  { id: "ask", label: "Ask Your Journal", icon: Sparkles },
 ];
 
 function slugifySymptom(label: string): string {
@@ -192,6 +195,7 @@ export default function JournalPage() {
         {tab === "encounters" && <EncountersTab />}
         {tab === "rash" && <RashTab />}
         {tab === "exposure" && <ExposureTab />}
+        {tab === "ask" && <AskTab />}
       </div>
     </div>
   );
@@ -944,6 +948,139 @@ function ExposureTab() {
           )}
         </Card>
       )}
+    </div>
+  );
+}
+
+// ---- Ask Your Journal (agentic tool-calling assistant) ----
+
+const EXAMPLE_QUESTIONS = [
+  "Is my fatigue trending up or down?",
+  "How often do I get a break from joint pain?",
+  "Which function domains am I struggling with most?",
+  "What has come up across my clinical encounters?",
+];
+
+interface AgentTurn {
+  question: string;
+  answer?: string;
+  toolCalls?: { tool: string; args: unknown }[];
+  error?: string;
+}
+
+function AskTab() {
+  const [question, setQuestion] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [turns, setTurns] = useState<AgentTurn[]>([]);
+
+  async function ask(q: string) {
+    const question = q.trim();
+    if (!question || loading) return;
+    setLoading(true);
+    setQuestion("");
+    setTurns((prev) => [...prev, { question }]);
+    try {
+      const [symptoms, functionEntries, anchors, encounters] = await Promise.all([
+        getSymptomEntries(),
+        getFunctionEntries(),
+        getTimelineAnchors(),
+        getClinicalEncounters(),
+      ]);
+      const res = await fetch("/api/journal-agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question, journalData: { symptoms, functionEntries, anchors, encounters } }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Something went wrong");
+      setTurns((prev) => {
+        const next = [...prev];
+        next[next.length - 1] = { question, answer: data.answer, toolCalls: data.toolCalls };
+        return next;
+      });
+    } catch (err) {
+      setTurns((prev) => {
+        const next = [...prev];
+        next[next.length - 1] = { question, error: err instanceof Error ? err.message : "Something went wrong" };
+        return next;
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <div className="flex items-start gap-2 mb-3">
+          <Sparkles className="w-4 h-4 text-teal-600 mt-0.5 shrink-0" />
+          <p className="text-xs text-slate-500">
+            An AI agent that answers questions about your own logged data by calling real tools — trend
+            calculations, function-impact tallies, symptom-free intervals — over your journal, not a general
+            chatbot. It never diagnoses or suggests medication; those questions get redirected to a clinician.
+          </p>
+        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void ask(question);
+          }}
+          className="flex gap-2"
+        >
+          <input
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="e.g. Is my fatigue getting worse over time?"
+            className={inputClass}
+          />
+          <button
+            type="submit"
+            disabled={loading || !question.trim()}
+            aria-label="Ask"
+            className="shrink-0 w-10 h-10 rounded-lg bg-teal-600 hover:bg-teal-700 disabled:bg-teal-200 text-white flex items-center justify-center transition-colors"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          </button>
+        </form>
+        {turns.length === 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-3">
+            {EXAMPLE_QUESTIONS.map((q) => (
+              <button
+                key={q}
+                type="button"
+                onClick={() => void ask(q)}
+                className="text-xs text-teal-700 bg-teal-50 border border-teal-100 rounded-full px-3 py-1.5 hover:bg-teal-100 transition-colors"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <div className="space-y-3">
+        {turns.map((t, i) => (
+          <Card key={i}>
+            <p className="text-sm font-medium text-slate-800 mb-2">{t.question}</p>
+            {t.error && <p className="text-sm text-red-600">{t.error}</p>}
+            {t.answer && (
+              <>
+                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{t.answer}</p>
+                {t.toolCalls && t.toolCalls.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-1.5">
+                    {t.toolCalls.map((tc, j) => (
+                      <span key={j} className="text-[11px] text-slate-400 bg-slate-50 border border-slate-100 rounded-full px-2 py-0.5">
+                        {tc.tool}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            {!t.answer && !t.error && <Loader2 className="w-4 h-4 animate-spin text-teal-600" />}
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }

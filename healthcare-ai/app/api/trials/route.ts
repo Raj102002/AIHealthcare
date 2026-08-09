@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, clientKeyFrom } from "@/lib/rate-limit";
+import { withMetrics } from "@/lib/metrics";
 
 const RATE_LIMIT = 30;
 const RATE_WINDOW_MS = 10 * 60 * 1000;
@@ -15,7 +16,7 @@ interface CtGovStudy {
 // Trial lookup (ClearSignal build spec, section 6.12) — a plain proxy over the
 // public ClinicalTrials.gov API v2. Condition is fixed to Lyme disease, since
 // this app's corpus is scoped there; location is the only other filter.
-export async function GET(request: NextRequest) {
+export const GET = withMetrics("trials", async (request: NextRequest) => {
   const { allowed, retryAfterSeconds } = checkRateLimit(`trials:${clientKeyFrom(request)}`, RATE_LIMIT, RATE_WINDOW_MS);
   if (!allowed) {
     return NextResponse.json(
@@ -54,4 +55,4 @@ export async function GET(request: NextRequest) {
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

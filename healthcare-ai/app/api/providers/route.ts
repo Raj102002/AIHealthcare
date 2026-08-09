@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, clientKeyFrom } from "@/lib/rate-limit";
+import { withMetrics } from "@/lib/metrics";
 
 const RATE_LIMIT = 30;
 const RATE_WINDOW_MS = 10 * 60 * 1000;
@@ -15,7 +16,7 @@ interface NppesResult {
 // the public NPPES NPI registry, filtered by specialty taxonomy and state/city
 // only. Never ranked by suitability for the patient's presentation — that
 // would imply a clinical judgment this app doesn't make.
-export async function GET(request: NextRequest) {
+export const GET = withMetrics("providers", async (request: NextRequest) => {
   const { allowed, retryAfterSeconds } = checkRateLimit(`providers:${clientKeyFrom(request)}`, RATE_LIMIT, RATE_WINDOW_MS);
   if (!allowed) {
     return NextResponse.json(
@@ -66,4 +67,4 @@ export async function GET(request: NextRequest) {
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

@@ -16,7 +16,7 @@ graph TB
         Crypto["Web Crypto AES-GCM<br/>(journal notes encrypted before save)"]
     end
 
-    subgraph Netlify["Netlify — serverless functions"]
+    subgraph Netlify["Netlify — serverless functions (withMetrics-wrapped)"]
         ChatAPI["/api/chat"]
         TranscribeAPI["/api/transcribe"]
         SpeakAPI["/api/speak"]
@@ -25,6 +25,14 @@ graph TB
         HandoffAPI["/api/handoff-narrative"]
         ProvidersAPI["/api/providers"]
         TrialsAPI["/api/trials"]
+        JournalAgentAPI["/api/journal-agent<br/>(tool-calling loop)"]
+        MetricsAPI["/api/admin/metrics"]
+    end
+
+    subgraph ObsCache["Observability & Caching (new)"]
+        Logger["lib/logger.ts — structured JSON logs"]
+        Metrics["lib/metrics.ts — RequestLog + token-budget tracking"]
+        Cache["lib/cache.ts — in-memory TTL cache<br/>(retrieval + TTS)"]
     end
 
     subgraph AI["AI Services"]
@@ -51,6 +59,7 @@ graph TB
     UI -->|fetch| ProvidersAPI
     UI -->|fetch| TrialsAPI
     UI -->|Parse JS SDK, direct from browser| Back4App
+    UI -->|fetch, posts journal arrays already held client-side| JournalAgentAPI
     Crypto -.applies to.-> UI
 
     ChatAPI --> Groq
@@ -64,6 +73,12 @@ graph TB
     SpeakAPI --> Groq
     ProvidersAPI --> NPPES
     TrialsAPI --> CTGov
+    JournalAgentAPI --> Groq
+
+    ChatAPI -.wraps every route.-> Metrics
+    Metrics --> Logger
+    Metrics -->|RequestLog writes| Back4App
+    ChatAPI -.retrieval + TTS.-> Cache
 ```
 
 **Note on the auth/data path:** the browser talks to Back4App directly via the
@@ -129,10 +144,15 @@ sequenceDiagram
 - Handoff narrative generation failure or banned-phrase/condition-name violation
   → falls back to a fully deterministic templated summary (`lib/handoff-narrative.ts`).
 
-**Caching: [PLANNED, not implemented].** There is currently no cache in front
-of Groq calls or Upstash queries. Given the free-tier daily token limit is easy
-to exhaust (documented in `plan.md`'s cost section), caching repeated/similar
-queries is a real near-term item, not a nice-to-have.
+**Caching: implemented.** `lib/cache.ts` (in-memory TTL cache) sits in front of
+`lib/retrieval.ts`'s dense+BM25 lookup and `app/api/speak/route.ts`'s TTS call
+— an identical retrieval request measured at 2224ms cold, 0ms on a cache hit.
+Given the free-tier daily token limit is easy to exhaust (documented in
+`plan.md`'s cost section), this directly reduces how often that ceiling gets
+hit. Same per-warm-instance limitation as rate limiting (below): does not
+share state across concurrent Netlify function instances or survive a cold
+start. The Groq generation call itself is intentionally *not* cached — chat
+answers should reflect the live conversation, not a stale cached response.
 
 ---
 
@@ -192,19 +212,35 @@ graph TB
         HandoffValidate -->|fail or unavailable| Template["Deterministic templated narrative<br/>(always available, no model needed)"]
         HandoffValidate -->|pass| HandoffOut["Generated narrative"]
     end
+
+    subgraph Agent["Real agentic loop — /api/journal-agent (new this cycle)"]
+        Question["Patient's free-text question<br/>+ journal arrays already fetched client-side"] --> AgentLLM["Groq llama-3.3-70b-versatile<br/>tools + tool_choice: auto"]
+        AgentLLM -->|tool_calls present| Dispatch["dispatchTool() —<br/>list_symptoms / get_severity_trend /<br/>get_function_impact / list_anchors /<br/>list_encounters / get_symptom_free_interval"]
+        Dispatch -->|tool results appended as role:tool messages| AgentLLM
+        AgentLLM -->|no tool_calls, or MAX_ITERATIONS=5 reached| AgentOut["Final answer —<br/>never diagnoses, never prescribes<br/>(system-prompt hard rule)"]
+    end
 ```
 
-**Agentic AI patterns: honestly, mostly absent.** This is a fixed multi-stage
-*pipeline* (screen → rewrite → retrieve → rerank → generate → validate), not an
-agent that dynamically selects tools or maintains cross-session memory beyond
-the chat history array already in the request. There is no function-calling
-loop where the model decides what to do next. Calling this "agentic" would be
-overclaiming. The closest things to agentic behavior are (a) the reranker
-making a judgment call about relevance, and (b) the query rewriter resolving
-follow-up references — both single-shot LLM calls with a fixed role, not a
-multi-step autonomous loop. If the build phase adds real agentic behavior, it
-would most plausibly be a "search my journal for patterns" feature where the
-model plans which deterministic analysis functions to call — see `plan.md`.
+**Agentic AI patterns: real, built this cycle — `/api/journal-agent`.** The
+rest of the app above (screen → rewrite → retrieve → rerank → generate →
+validate) is still an honest, fixed *pipeline*: no step there lets the model
+choose what happens next, and calling that agentic would still be
+overclaiming. But the journal agent is a genuine multi-step tool-calling
+loop: the model receives six JSON-Schema tool definitions (`Agent` subgraph
+above), decides which to call, in what order, and whether it needs more than
+one before it can answer — the route loops feeding results back until the
+model stops requesting tools or `MAX_ITERATIONS` (5) is hit. **Verified
+live** against the dev server: a "is my fatigue getting worse, and how often
+do I get symptom-free breaks" question triggered two real, model-chosen tool
+calls (`get_severity_trend` then `get_symptom_free_interval`) and a correct
+natural-language synthesis of both results (a computed 1.08-point/week slope,
+a computed 10-day median gap); a direct "do I have Lyme disease, what
+antibiotic dose" question triggered `list_symptoms`/`list_anchors` lookups
+and then correctly refused both the diagnosis and the prescription per the
+system prompt's hard rules, deflecting to a clinician instead. The reranker
+and query rewriter elsewhere in the app remain single-shot, fixed-role LLM
+calls, not agentic — that distinction is now backed by a real contrasting
+example in the same codebase rather than asserted abstractly.
 
 ---
 
@@ -293,12 +329,15 @@ erDiagram
     }
 ```
 
-**Indexes: [PARTIALLY PLANNED].** Parse Server auto-indexes `objectId` and
-`createdAt`. All list queries filter on `userId` and sort on `occurredAt`
-(`lib/journal-client.ts`), so a compound index on `(userId, occurredAt)` per
-class would meaningfully speed up queries at scale — not yet explicitly
-configured in the Back4App dashboard. This is a Production Engineering item in
-`plan.md`, not done.
+**Indexes: scripted, not yet executed.** Parse Server auto-indexes `objectId`
+and `createdAt`. All list queries filter on `user` and sort on `occurredAt`
+(`lib/journal-client.ts`), so `scripts/setup-indexes.ts` (new this cycle)
+creates a compound `(user, occurredAt)` index per journal class via
+`Parse.Schema`, gated on an ephemeral `BACK4APP_MASTER_KEY` env var (never
+stored in `.env.local` — see `docs/database-optimization.md`). Idempotent, so
+safe to re-run. **Honest gap:** not actually run against a live Back4App app
+in this session — no real master key was available in this environment. The
+script itself was typechecked and reviewed, not executed end-to-end.
 
 **Connection pooling / backups:** handled at the Back4App platform level (managed
 MongoDB); no custom configuration has been done on this project's part.
@@ -313,7 +352,7 @@ docs generated — this table is the source of truth today.
 
 | Route | Method | Request | Response | Notes |
 |---|---|---|---|---|
-| `/api/chat` | POST | `{ messages: {role,content}[], userProfile? }` | `text/plain` stream; headers `X-RAG-Sources` (base64 JSON), `X-Coinfection-Notes` (base64 JSON, optional), `X-Red-Flag` (severity, on short-circuit) | Red-flag screened before any model call. Rate limiting: none yet on this route specifically — **[GAP, see plan.md]**. |
+| `/api/chat` | POST | `{ messages: {role,content}[], userProfile? }` | `text/plain` stream; headers `X-RAG-Sources` (base64 JSON), `X-Coinfection-Notes` (base64 JSON, optional), `X-Red-Flag` (severity, on short-circuit) | Red-flag screened before any model call. Zod-validated and rate-limited (added this cycle, previously the one gap). |
 | `/api/transcribe` | POST | `multipart/form-data`: `audio` (File), `language?` | `{ text: string }` | Groq `whisper-large-v3-turbo`, prompt-seeded with domain vocabulary. Rate-limited (30 req / 10 min / IP). |
 | `/api/speak` | POST | `{ text: string }` | `audio/mpeg` binary | Groq `playai-tts`. Rate-limited (30 req / 10 min / IP). Client falls back to `SpeechSynthesis` on failure. |
 | `/api/test-context` | POST | `{ symptomOnsetDate: string, testDate: string }` | `{ daysFromOnset, window, message, sources[], contextAvailable }` | Date math is deterministic; only the sourced explanation text is retrieved. Rate-limited (20/10min/IP). |
@@ -321,7 +360,13 @@ docs generated — this table is the source of truth today.
 | `/api/handoff-narrative` | POST | `{ analysis: HandoffAnalysis }` | `{ narrative: string, source: "generated"\|"templated" }` | Falls back to template on any validation failure. Rate-limited (10/10min/IP). |
 | `/api/providers` | GET | Query params: `specialty`, `state` (required), `city?` | `{ providers: [{npi,name,credential,specialty,city,state,phone}] }` | Proxies NPPES NPI Registry, no key required. Rate-limited (30/10min/IP). |
 | `/api/trials` | GET | Query params: `location?` | `{ trials: [{nctId,title,status,locations[],url}] }` | Proxies ClinicalTrials.gov v2, condition fixed to "Lyme Disease", no key required. Rate-limited (30/10min/IP). |
+| `/api/journal-agent` | POST | `{ question: string, journalData: { symptoms[], functionEntries[], anchors[], encounters[] } }` | `{ answer: string, toolCalls: {tool,args}[], iterations: number }` | New this cycle. Real Groq tool-calling loop (see design section 4) over journal data the authenticated client already fetched and sends — this route never independently queries Back4App. Zod-validated, rate-limited (15/10min/IP). |
+| `/api/admin/metrics` | GET | — | `{ routes: [{route, count, p50, p95, errorRate, tokenUsage}] }` | New this cycle. Aggregates real `RequestLog` writes from `withMetrics()`, which now wraps every route in this table. Powers the `/admin` dashboard. |
 | `/api/health-insights` | POST | Pre-existing route from the original project baseline | — | Not modified in this build-phase cycle. |
+
+**Rate limiting: `/api/chat` and `/api/exposure` gaps closed this cycle** —
+every route that calls Groq or an external API is now rate-limited, not just
+the ones listed as such in the prior revision of this document.
 
 **Auth on API routes: [GAP].** None of these routes currently verify a Parse
 session token server-side — they're either public-data proxies (providers,
@@ -344,8 +389,8 @@ notes in `plan.md`.
 
 ```mermaid
 graph LR
-    Dev["Local dev — npm run dev"] -->|git push| GitHub["GitHub, main branch<br/>week2-Raj102002 / week3-Raj102002"]
-    GitHub -->|auto-deploy on push| Netlify["Netlify<br/>@netlify/plugin-nextjs"]
+    Dev["Local dev — npm run dev"] -->|git push| GitHub["GitHub<br/>week2/week3-Raj102002, buildphase-Raj102002,<br/>personal repo"]
+    GitHub -->|auto-deploy on push| Netlify["Netlify<br/>netlify.toml: base=healthcare-ai<br/>@netlify/plugin-nextjs"]
     Netlify --> Functions["Serverless functions,<br/>one per API route"]
     Netlify --> StaticPages["Static/prerendered pages,<br/>CDN-served"]
     Functions --> GroqSvc["Groq API"]
@@ -355,23 +400,38 @@ graph LR
     EndUser["End-user browser"] --> StaticPages
     EndUser --> Functions
     EndUser -->|Parse JS SDK, direct| Back4AppSvc
+
+    Dev -.alternate path.-> Docker["Docker — multi-stage build<br/>node:20-alpine, output: standalone"]
+    Docker --> Portable["Portable / self-hosted deploy target<br/>(grading review, local parity — not production)"]
 ```
 
-**Current status: [GAP].** The RAG rebuild and every ClearSignal feature in
-this document were built and verified locally (`npm run build` passes,
-`npm run dev` manually tested, API routes curl-tested against real Groq/Upstash/
-NPPES/ClinicalTrials.gov) but **have not yet been pushed to the branch Netlify
-deploys from**, so the live Netlify URL does not currently reflect this work.
-Deploying it is the first milestone in `plan.md`'s timeline.
+**Current status: pushed, deploy-confirmation gap remains honest.** All of
+this document's code — the RAG rebuild, every ClearSignal feature, and this
+cycle's Production Engineering/Security/Agentic AI work — is pushed to
+`week2-Raj102002`, `week3-Raj102002`, `buildphase-Raj102002`, and the
+personal repo. **What's not confirmed:** I did not have Netlify
+dashboard/CLI access in this session to trigger a fresh production build and
+confirm it goes green with this cycle's changes (new routes, new headers,
+the `next` version bump). What is confirmed locally: `npm run build`
+produces all 23 routes cleanly, `tsc --noEmit` and `eslint .` are both clean,
+and the individual pieces the deploy depends on (standalone output path,
+traced file includes) were checked directly. See `docs/deployment.md`
+section 3 for the exact scope.
 
-**CI/CD:** `.github/workflows/ci.yml` exists in the implementation repo from
-the original project baseline. It has not been extended to run the new eval
-scripts (`npm run eval`, `npm run eval:cs`) as part of CI — see `plan.md`.
+**CI/CD:** still no automated CI pipeline running `tsc`/`eslint`/`npm audit`/
+the eval scripts on push — `tsc --noEmit`, `eslint .`, and `npm run build`
+were run by hand after every change this cycle (verified clean each time),
+not automated. Named, scoped follow-up work, not done.
 
-**No containerization.** The app runs entirely on Netlify's managed Next.js
-runtime; there is no Dockerfile because there's no container host in this
-deployment path. If a future requirement needs a portable/self-hosted
-deployment, containerization would be added then — see `plan.md`.
+**Containerization: now real** — see the `Docker` branch of the diagram
+above. Multi-stage `Dockerfile` targeting `output: "standalone"`,
+`docker-compose.yml`, `.dockerignore`. This is explicitly the
+portable/reproducibility path for grading review and local parity, not a
+change to the production deployment target (Netlify remains that). **Honest
+gap:** no `docker` binary was available in the sandbox this was built in, so
+the image was never actually built or booted — the standalone build output
+it depends on was verified directly instead. See `docs/deployment.md`
+section 2.
 
 ---
 
@@ -386,3 +446,5 @@ deployment, containerization would be added then — see `plan.md`.
 | **BM25 in-memory (own implementation) + Upstash dense, fused with RRF** | Dense-only retrieval was the actual, measured failure mode of the previous version of this app (see `plan.md`'s technical feasibility notes) — exact terms and proper nouns (drug names, place names) get blurred by embeddings alone. BM25 catches what dense search misses, RRF combines both without needing to hand-tune a blend weight. | A hosted hybrid-search vector DB (e.g. Weaviate) would remove the need for a hand-rolled BM25 implementation, but was not adopted mid-cycle for the same reason Supabase wasn't: Upstash was already working, and swapping vector stores has no functional payoff without also swapping off Back4App-adjacent constraints. |
 | **Web Crypto API (client-side AES-GCM)** | No server dependency, no key-management service needed for prototyping; matches the explicit design requirement that journal notes must never be readable server-side. | A managed secrets/KMS-backed encryption service — deferred; the honest limitation (key lives only in `localStorage`, no cross-device recovery) is documented rather than hidden, see `docs/privacy.md`. |
 | **Parse User auth** (not a separate auth provider like Clerk/Auth0/Supabase Auth) | Comes bundled with Back4App; session tokens, password hashing, and `Parse.User.current()` session persistence are handled without extra integration work. | A dedicated auth provider would be redundant given Back4App already provides this, and would mean maintaining two identity systems for the ACL scoping to reference. |
+| **zod** (input validation, new this cycle) | Schema-first validation with structured, field-level error messages (`formatZodError()`), applied at every route parsing untrusted JSON — matches the TypeScript types already in use rather than duplicating shapes by hand. | Hand-written `if` checks (what existed before) don't scale past a couple of fields without becoming their own source of bugs; a heavier framework (e.g. a full OpenAPI-generated validator) was unnecessary for route handlers this small. |
+| **In-memory cache/rate-limit/token-budget** (not Redis, yet) | Zero new infrastructure to stand up mid-build-phase; correct within the "per warm instance" caveat documented throughout. | Upstash Redis is the deliberate, named next step — same vendor as the vector store already in use, so no new vendor relationship — not implemented because it needs Redis REST credentials this project doesn't have in this environment. Architected so the swap is additive (`lib/cache.ts`'s function signatures don't leak the in-memory implementation detail to callers). |

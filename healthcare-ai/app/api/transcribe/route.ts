@@ -1,6 +1,7 @@
 import Groq from "groq-sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, clientKeyFrom } from "@/lib/rate-limit";
+import { withMetrics } from "@/lib/metrics";
 
 const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -14,7 +15,7 @@ const DOMAIN_VOCABULARY_PROMPT =
   "doxycycline, amoxicillin, cefuroxime, ELISA, Western blot, CDC, facial palsy, " +
   "erythema, arthralgia, myalgia.";
 
-export async function POST(request: NextRequest) {
+export const POST = withMetrics("transcribe", async (request: NextRequest) => {
   const { allowed, retryAfterSeconds } = checkRateLimit(
     `transcribe:${clientKeyFrom(request)}`,
     RATE_LIMIT,
@@ -60,4 +61,4 @@ export async function POST(request: NextRequest) {
       error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

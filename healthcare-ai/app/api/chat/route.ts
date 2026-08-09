@@ -6,8 +6,19 @@ import { buildContext, buildSystemPrompt, type HealthProfile } from "@/lib/gener
 import { screenRedFlags } from "@/lib/red-flag";
 import { detectCoinfectionSignals, COINFECTION_QUESTIONS } from "@/lib/co-infection";
 import { loadCorpusChunks } from "@/lib/corpus-lookup";
+import { checkRateLimit, clientKeyFrom } from "@/lib/rate-limit";
+import { recordRequest, recordTokenUsage } from "@/lib/metrics";
+import { chatRequestSchema, formatZodError } from "@/lib/validation";
+import { flagPromptInjection } from "@/lib/prompt-injection";
+import { logger } from "@/lib/logger";
 
 const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+// This route was the one gap flagged in design.md's API table — every other
+// AI-calling route already had rate limiting. Higher limit than the other
+// routes since this is the primary chat surface.
+const RATE_LIMIT = 60;
+const RATE_WINDOW_MS = 10 * 60 * 1000;
 
 function redFlagResponse(copy: string, severity: string): NextResponse {
   const prefixed = severity === "urgent" ? copy : `[EMERGENCY]\n${copy}`;
@@ -21,19 +32,39 @@ function redFlagResponse(copy: string, severity: string): NextResponse {
 }
 
 export async function POST(request: NextRequest) {
+  const requestStart = Date.now();
+  const { allowed, retryAfterSeconds } = checkRateLimit(`chat:${clientKeyFrom(request)}`, RATE_LIMIT, RATE_WINDOW_MS);
+  if (!allowed) {
+    recordRequest({ route: "chat", durationMs: Date.now() - requestStart, status: "rate_limited" });
+    return NextResponse.json(
+      { error: "Rate limit reached. Please wait a moment and try again." },
+      { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } }
+    );
+  }
+
   try {
-    const body = await request.json();
-    const { messages, userProfile } = body as {
+    const rawBody = await request.json();
+    const parsed = chatRequestSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
+    }
+    const { messages, userProfile } = parsed.data as {
       messages: { role: "user" | "assistant"; content: string }[];
       userProfile?: HealthProfile;
     };
 
-    if (!messages?.length) {
-      return NextResponse.json({ error: "Messages array is required" }, { status: 400 });
-    }
     const lastMessage = messages[messages.length - 1];
     if (lastMessage.role !== "user" || !lastMessage.content.trim()) {
       return NextResponse.json({ error: "Last message must be from the user" }, { status: 400 });
+    }
+
+    // Logged, not blocked: a health chat legitimately discusses phrases that
+    // overlap with injection patterns ("ignore" symptoms, "disregard" a prior
+    // diagnosis), so hard-rejecting would cause real false positives. This
+    // gives observability into attempts without breaking legitimate use —
+    // see docs/security-audit.md for why blocking wasn't chosen here.
+    if (flagPromptInjection(lastMessage.content)) {
+      logger.warn("prompt-injection pattern matched in user message", { route: "chat" });
     }
 
     // Runs before anything else, on the raw message only — deterministic pattern
@@ -41,6 +72,7 @@ export async function POST(request: NextRequest) {
     // query rewriting, no retrieval, no citations, no generation call.
     const redFlag = screenRedFlags(lastMessage.content);
     if (redFlag) {
+      recordRequest({ route: "chat", durationMs: Date.now() - requestStart, status: "success", model: `red-flag:${redFlag.rule.id}` });
       return redFlagResponse(redFlag.rule.copy, redFlag.rule.severity);
     }
 
@@ -87,15 +119,29 @@ export async function POST(request: NextRequest) {
     const encoder = new TextEncoder();
     const readable = new ReadableStream({
       async start(controller) {
+        let usage: { prompt_tokens?: number; completion_tokens?: number } | undefined;
         try {
           for await (const chunk of stream) {
             const text = chunk.choices[0]?.delta?.content ?? "";
             if (text) {
               controller.enqueue(encoder.encode(text));
             }
+            // Groq includes usage on the final chunk of a stream, not every chunk.
+            if (chunk.x_groq?.usage) usage = chunk.x_groq.usage;
           }
         } finally {
           controller.close();
+          const promptTokens = usage?.prompt_tokens ?? 0;
+          const completionTokens = usage?.completion_tokens ?? 0;
+          if (promptTokens || completionTokens) recordTokenUsage(promptTokens, completionTokens);
+          recordRequest({
+            route: "chat",
+            durationMs: Date.now() - requestStart,
+            status: "success",
+            model: "llama-3.3-70b-versatile",
+            promptTokens,
+            completionTokens,
+          });
         }
       },
     });
@@ -117,12 +163,14 @@ export async function POST(request: NextRequest) {
       "status" in error &&
       (error as { status: number }).status === 429
     ) {
+      recordRequest({ route: "chat", durationMs: Date.now() - requestStart, status: "rate_limited" });
       return NextResponse.json(
         { error: "Rate limit reached. Please wait a moment and try again." },
         { status: 429 }
       );
     }
     const message = error instanceof Error ? error.message : "Internal server error";
+    recordRequest({ route: "chat", durationMs: Date.now() - requestStart, status: "error", errorMessage: message });
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

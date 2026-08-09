@@ -3,7 +3,16 @@ import { getVectorIndex } from "@/lib/vector-client";
 import { bm25Search } from "@/lib/bm25";
 import { rerank } from "@/lib/rerank";
 import { expandQuery } from "@/lib/vocabulary-map";
+import { cached, cacheKeyFromText } from "@/lib/cache";
 import type { ChunkMetadata, RetrievedChunk } from "@/types/rag";
+
+// Dense search + BM25 + RRF + an LLM rerank call is the most expensive part of
+// every chat turn. Identical or repeated questions (genuinely common — "what
+// is Lyme disease" is asked a lot) hit this cache instead of re-running all of
+// it. 15 minutes balances staleness against savings: the corpus only changes
+// via `npm run ingest`, which isn't a frequent event, so a 15-minute-stale
+// answer to a repeated question is a reasonable tradeoff, not a correctness risk.
+const RETRIEVAL_CACHE_TTL_MS = 15 * 60 * 1000;
 
 const DENSE_TOPK = 20;
 const BM25_TOPK = 20;
@@ -80,7 +89,10 @@ export async function fuseCandidates(query: string): Promise<RetrievedChunk[]> {
 // Returns [] when nothing clears the relevance bar — callers must treat that as
 // "no context available", not retry with a lower bar.
 export async function retrieve(query: string, groq: Groq): Promise<RetrievedChunk[]> {
-  const fused = await fuseCandidates(query);
-  if (fused.length === 0) return [];
-  return rerank(query, fused, FINAL_TOPK, groq);
+  const cacheKey = `retrieve:${cacheKeyFromText(query)}`;
+  return cached(cacheKey, RETRIEVAL_CACHE_TTL_MS, async () => {
+    const fused = await fuseCandidates(query);
+    if (fused.length === 0) return [];
+    return rerank(query, fused, FINAL_TOPK, groq);
+  });
 }
