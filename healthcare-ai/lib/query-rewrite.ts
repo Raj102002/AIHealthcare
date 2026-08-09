@@ -1,4 +1,5 @@
 import type Groq from "groq-sdk";
+import { recordTokenUsage } from "@/lib/metrics";
 
 const REWRITE_MODEL = "llama-3.1-8b-instant";
 const HISTORY_TURNS = 3;
@@ -30,6 +31,9 @@ Rewrite the latest user message as a standalone search query that makes sense wi
       temperature: 0,
       messages: [{ role: "user", content: prompt }],
     });
+    if (completion.usage) {
+      recordTokenUsage(completion.usage.prompt_tokens ?? 0, completion.usage.completion_tokens ?? 0);
+    }
     const rewritten = completion.choices[0]?.message?.content?.trim();
     return rewritten || latestMessage;
   } catch {

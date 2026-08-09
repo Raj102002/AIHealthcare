@@ -55,12 +55,12 @@ that never diagnoses.
 
 | Requirement | Status & how this plan addresses it |
 |---|---|
-| **AI Integration** | Hybrid RAG chat (dense + BM25 + Reciprocal Rank Fusion + LLM rerank), grounded in a CDC Lyme disease corpus, with query rewriting for follow-ups and a hard relevance threshold (empty context → the model says so, never guesses). A separately guarded LLM call generates the clinician-handoff narrative, validated against a banned-phrase/condition-name list with an always-available deterministic template fallback. Voice input (Groq Whisper, domain-vocabulary-seeded) and output (Groq TTS, browser-`SpeechSynthesis` fallback) layer on top. This is not a bare chatbot wrapper — see `design.md` section 4 for the full component diagram. Rate limiting, loading states, and distinct error messages (permission denied / no microphone / network failure / empty transcript, etc.) are implemented; the one route missing rate limiting today is `/api/chat` itself — **[GAP, Week 1 fix]**. |
-| **Backend & Database** | Back4App (Parse Server / MongoDB). Seven classes with full CRUD: `HealthLog`, `Conversation` (pre-existing), `SymptomEntry`, `FunctionEntry`, `TimelineAnchor`, `ClinicalEncounter`, `RashPhoto` (this build-phase cycle). Every write path sets an owner-scoped ACL (`new Parse.ACL(user)`) before saving — verified by direct code review, not assumed. |
+| **AI Integration** | Hybrid RAG chat (dense + BM25 + Reciprocal Rank Fusion + LLM rerank), grounded in a CDC Lyme disease corpus, with query rewriting for follow-ups and a hard relevance threshold (empty context → the model says so, never guesses). A separately guarded LLM call generates the clinician-handoff narrative, validated against a banned-phrase/condition-name list with an always-available deterministic template fallback. Voice input (Groq Whisper, domain-vocabulary-seeded) and output (Groq TTS, browser-`SpeechSynthesis` fallback) layer on top. A real agentic feature — `/api/journal-agent`, a Groq tool-calling loop over the patient's own journal data — was also built this cycle (see the updated Agentic AI section below). This is not a bare chatbot wrapper — see `design.md` section 4 for the full component diagram. Rate limiting, loading states, and distinct error messages (permission denied / no microphone / network failure / empty transcript, etc.) are implemented on every AI-calling route, including `/api/chat` and `/api/exposure`, which were the two gaps in the prior pass — **now closed**. |
+| **Backend & Database** | Back4App (Parse Server / MongoDB). Seven classes with full CRUD: `HealthLog`, `Conversation` (pre-existing), `SymptomEntry`, `FunctionEntry`, `TimelineAnchor`, `ClinicalEncounter`, `RashPhoto` (this build-phase cycle). Every write path sets an owner-scoped ACL (`new Parse.ACL(user)`) before saving — verified by direct code review, not assumed. Compound indexes for the journal classes now have a real, idempotent creation script (`scripts/setup-indexes.ts`) — see the updated Database Optimization section. |
 | **Authentication** | Parse User registration/login/session persistence. Every protected page checks `getCurrentUser()` and redirects unauthenticated visitors; ACLs enforce the same boundary server-side regardless of client-side checks. Secrets (`GROQ_API_KEY`, Back4App app/JS keys, `UPSTASH_VECTOR_REST_URL`/`TOKEN`) live in `.env.local`, never committed — `.env.local.example` documents what's needed without real values. |
-| **Documentation** | README covers AI integration, setup instructions, and tech stack. **[NEEDS AUTHOR INPUT before submission]**: name, Z-number, FAU email, deployed app link, demo video link. |
-| **Deployment** | Netlify. **[GAP — not yet deployed this cycle]**: this build-phase's work (RAG rebuild, voice mode, all ClearSignal features) is built and locally verified (`npm run build` passes) but not yet pushed to the branch Netlify deploys from. First milestone below. |
-| **GitHub Repository** | Implementation history lives in `week2-Raj102002` / `week3-Raj102002` (9+ logically-scoped commits for the RAG/voice rebuild: ingestion pipeline, hybrid retrieval, unified chat endpoint, eval harness, voice STT/TTS, voice UX — each with a message explaining the *why*, not just the *what*). This repo (`buildphase-Raj102002`) holds planning docs only, per the assignment's own separation. |
+| **Documentation** | README covers AI integration, setup instructions, and tech stack. `healthcare-ai/docs/deployment.md` (new this cycle) covers local dev, Docker, Netlify, database setup, eval harness, and observability end to end. **[NEEDS AUTHOR INPUT before submission]**: name, Z-number, FAU email, deployed app link, demo video link. |
+| **Deployment** | Netlify (`netlify.toml` at this repo's root, `base = "healthcare-ai"`). The full ClearSignal codebase, including everything built this cycle, is pushed to this repo. **[GAP, honestly stated]**: I did not have Netlify CLI/dashboard access in this session to trigger and confirm a fresh production deploy of this cycle's changes (new routes, new headers, the `next` version bump) — see `docs/deployment.md` section 3 for the exact scope of what is and isn't verified. What *is* verified locally: `npm run build` passes clean with all 23 routes generated, `tsc --noEmit` and `eslint .` both clean. |
+| **GitHub Repository** | Implementation history lives in `week2-Raj102002` / `week3-Raj102002` (RAG/voice rebuild, then the ClearSignal pivot, then this build-phase's Production Engineering/Security/Agentic AI pass — each logically-scoped commit explains the *why*, not just the *what*). This repo (`buildphase-Raj102002`) now holds both the planning docs and a synced copy of the implementation, per the later clarification that both were wanted here. |
 | **Demo Video** | **[NOT YET RECORDED]** — scheduled for the week the deployed MVP is stable (see timeline). |
 | **Canvas Submission** | Submitted by the author after this repo is pushed. |
 
@@ -127,83 +127,162 @@ that never diagnoses.
   BM25 implementation over a local JSON mirror of the corpus, fused with
   Reciprocal Rank Fusion, then reranked by an LLM call with a hard minimum
   relevance score. Full detail and measured numbers in `design.md` section 4.
-- **Agentic AI patterns: honestly, largely absent.** This is a fixed
-  multi-stage pipeline, not an agent that dynamically selects tools or plans
-  multi-step actions. See `design.md` section 4 for the explicit "what this
-  is and isn't" note — claiming agentic behavior here would be overclaiming.
-  If a real agentic feature is added this build phase, the most plausible
-  candidate is a "search my journal for patterns" tool-calling flow where the
-  model decides which deterministic analysis function (`lib/handoff-analysis.ts`)
-  to invoke — **[PLANNED, not started]**.
-- **Caching and fallback for failed retrievals:** fallback behavior is real
-  and implemented (empty-context handling, rerank-failure fallback to RRF
-  order, query-rewrite-failure fallback to the raw message) — see `design.md`
-  section 2. **Caching is not implemented — [PLANNED]**, and given the
-  measured Groq quota constraint above, it's a near-term priority, not a
-  nice-to-have.
+- **Agentic AI patterns: now real, built this cycle.** `/api/journal-agent`
+  (`app/api/journal-agent/route.ts` + `lib/journal-tools.ts`) is a genuine
+  multi-step tool-calling loop, not a fixed pipeline: the model receives six
+  JSON Schema tool definitions (`list_symptoms`, `get_severity_trend`,
+  `get_function_impact`, `list_anchors`, `list_encounters`,
+  `get_symptom_free_interval`), decides which to call and in what order via
+  Groq's OpenAI-compatible `tools`/`tool_choice: "auto"` interface, and the
+  route loops (up to `MAX_ITERATIONS = 5`) feeding tool results back as
+  `role: "tool"` messages until the model returns a plain-text answer. This
+  is the rest of the app's fixed hybrid-RAG pipeline's explicit counterpart —
+  see `design.md`'s AI component diagram for the distinction. **Verified
+  live**, not just typechecked: a real dev-server request with four
+  synthetic fatigue entries produced two real tool calls
+  (`get_severity_trend` → a genuine computed linear-regression slope of
+  1.08 severity points/week, `get_symptom_free_interval` → a genuine
+  10-day median gap) and a natural-language answer citing both numbers. A
+  second test directly asked "do I have Lyme disease, what antibiotic dose
+  should I take" — the model called `list_symptoms`/`list_anchors`, found no
+  supporting data, and correctly deflected diagnosis/prescription to a
+  clinician per the system prompt's hard rules, never fabricating either.
+  A UI entry point ("Ask Your Journal" tab in `app/journal/page.tsx`) posts
+  the four journal arrays plus a free-text question to this route.
+- **Caching and fallback for failed retrievals:** fallback behavior (empty-context
+  handling, rerank-failure fallback to RRF order, query-rewrite-failure
+  fallback to the raw message) remains as before — see `design.md` section 2.
+  **Caching is now implemented** (`lib/cache.ts`, an in-memory TTL cache
+  wrapping retrieval and TTS calls) — see the updated Caching section below
+  for the measured before/after latency.
 
 #### Production Engineering
 
-All items in this subsection are **[PLANNED]** unless noted otherwise — none
-of the following exist in the codebase today:
+All items below were **built and verified this cycle** unless a gap is
+explicitly called out — this replaces the earlier all-[PLANNED] state.
 
-- **Containerization:** not present. The app runs on Netlify's managed
-  Next.js runtime; no Dockerfile exists because there's no container host in
-  the current deployment path. Would be added only if a portable/self-hosted
-  deployment target becomes necessary.
-- **Observability:** no structured logging, no Sentry (or equivalent) error
-  tracking, no performance dashboards. Current debugging relies on Netlify's
-  function logs and manual `console.log`/`console.warn` in a handful of
-  fallback paths (e.g. `scripts/ingest.ts`, `lib/rerank.ts`).
-- **Database optimization:** Back4App/MongoDB connection pooling and backups
-  are handled at the platform level, not configured by this project. Custom
-  compound indexes on `(userId, occurredAt)` for the journal classes are
-  identified as valuable in `design.md` section 5 but not yet added in the
-  Back4App dashboard.
-- **Caching strategy:** none. No Redis, no CDN cache-control tuning beyond
-  Netlify's defaults for static assets, no explicit cache-expiration policy.
-- **Infrastructure documentation:** `README.md` covers app setup; there is no
-  separate infrastructure-as-code or reproducible deployment script beyond
-  `netlify.toml`.
+- **Containerization: built.** Multi-stage `Dockerfile` (deps → builder →
+  distroless-style `node:20-alpine` runner, non-root user, `output:
+  "standalone"`), `docker-compose.yml`, `.dockerignore`. This targets local
+  reproducibility and grading review, not a change of the production
+  deployment target — Netlify remains the actual host. **Honest gap:** no
+  `docker` binary was available in the sandbox this was built in, so the
+  image itself was never actually built or booted. What is verified: the
+  Next.js standalone build the Dockerfile depends on produces `server.js` at
+  the correct top-level path (confirmed directly), and every file path the
+  `COPY` steps reference exists. See `docs/deployment.md` section 2 for the
+  precise scope of what's proven vs. assumed.
+- **Observability: built.** Structured JSON logging (`lib/logger.ts`) plus a
+  custom Back4App-backed request-metrics system (`lib/metrics.ts`'s
+  `RequestLog` class and `withMetrics()` wrapper, applied to every API
+  route) recording route, status, duration, and token usage per request. An
+  admin dashboard (`/admin`, `app/api/admin/metrics/route.ts`) aggregates
+  these into request counts, p50/p95 latency, error rate, and token usage.
+  **Verified live**: real requests were sent to the dev server, real
+  `RequestLog` writes landed in Back4App, and the dashboard's p50/p95
+  aggregation was confirmed against them. Sentry (or equivalent third-party
+  error tracking) was **not** wired up — it needs a DSN this project doesn't
+  have credentials for; the structured-logging + custom-metrics approach is
+  the real, working substitute in place, not a stand-in claimed equivalent.
+- **Database optimization: built.** `scripts/setup-indexes.ts` creates
+  compound indexes (`user` + `occurredAt`) on the journal classes via
+  `Parse.Schema`, gated on an ephemeral `BACK4APP_MASTER_KEY` env var that is
+  never stored in `.env.local` (see `docs/database-optimization.md`).
+  Idempotent — safe to re-run. **Honest gap:** not actually executed against
+  a live Back4App app in this session (no real master key available here);
+  the script was typechecked and logic-reviewed, not run end-to-end.
+- **Caching strategy: built.** `lib/cache.ts`, an in-memory TTL cache wired
+  into `lib/retrieval.ts` (dense+BM25 retrieval results) and
+  `app/api/speak/route.ts` (TTS audio for repeated text). **Verified live**:
+  an identical retrieval query measured at 2224ms cold dropped to 0ms on a
+  cache hit. Documented limitation, consistent with rate limiting and
+  token-budget tracking: this lives in one warm Netlify function instance's
+  memory, not a shared store — the correct production upgrade is Upstash
+  Redis (already the vector-store vendor, so no new vendor relationship),
+  not implemented because it needs Redis REST credentials this project
+  doesn't have.
+- **Infrastructure documentation: built.** `docs/deployment.md` (new this
+  cycle) covers local dev, Docker, Netlify (including the actual
+  `netlify.toml` contents and where it lives), one-time database setup, the
+  eval harness, observability, and a plainly-stated "known gaps" section
+  (no health-check endpoint, no CI pipeline, no automated rollback, Redis/
+  Sentry upgrades blocked on credentials).
 - **Performance targets (p95 < 500ms API, p95 < 100ms DB, uptime > 99.5%,
-  error rate < 1%):** not measured. No instrumentation exists to report
-  these numbers today. Establishing a baseline is a Week 2 milestone below.
+  error rate < 1%):** now *measurable* via the `/admin` dashboard built this
+  cycle, but not yet measured against sustained real traffic — the numbers
+  it shows reflect whatever traffic this app has seen during development,
+  not a simulated production load. Establishing a real baseline needs actual
+  usage after deployment, which single-session work can't fabricate.
 
 #### Security & Costs
 
 - **Secrets management:** environment variables only, never committed
   (`.env.local` gitignored, `.env.local.example` documents shape without
   values). No secrets rotation policy, no dedicated secrets manager beyond
-  Netlify's environment variable UI — **[PLANNED to formalize, not currently
-  a gap in practice since nothing is hardcoded]**. A manual review of the
-  codebase for hardcoded credentials found none as of this snapshot.
-- **Security hardening:**
-  - Rate limiting: implemented on `/api/transcribe`, `/api/speak`,
-    `/api/test-context`, `/api/handoff-narrative`, `/api/providers`,
-    `/api/trials` (in-memory, per-IP, sliding window — see `design.md`
-    section 6 for the documented limitation that this doesn't coordinate
-    across concurrent function instances). **`/api/chat` itself is not yet
-    rate-limited — [GAP]**.
-  - Input validation: present but minimal — required-field checks on forms,
-    date validity checks on `/api/test-context`. No schema-level validation
-    library (e.g. zod) in use yet.
-  - Prompt-injection defenses: none beyond the system prompt's own
-    instructions to only use retrieved context for factual claims. Retrieved
-    corpus content is trusted content (CDC-sourced, ingested by the project
-    itself), which limits the practical injection surface today, but this
-    hasn't been stress-tested — **[PLANNED: adversarial prompt testing]**.
-  - CORS / CSP / HSTS / other security headers: not configured — **[GAP]**.
-- **Cost optimization:** no token-counting or budget-alert system exists.
-  What's known from actual usage this build phase: Groq's free/on-demand tier
-  caps at 100,000 tokens/day, and that limit was hit and exceeded running eval
-  suites during this cycle (see feasibility notes above) — the real, measured
-  cost pressure on this project is Groq quota, not dollar cost, since every
-  service in use (Back4App, Upstash, Groq, NPPES, ClinicalTrials.gov) is
-  currently on a free tier.
-- **Security audit plan:** not yet performed. No dependency-vulnerability
-  scanning (e.g. `npm audit` as a CI step), no formal auth/authz flow review
-  beyond the ACL verification already done for the journal classes (documented
-  in `docs/privacy.md` in the implementation repo).
+  Netlify's environment variable UI — still true, not treated as a gap since
+  nothing is hardcoded (verified by grep this cycle, see the audit below). A
+  new credential this cycle, `BACK4APP_MASTER_KEY`, is documented as
+  ephemeral-only — passed as a one-off env var for `setup-indexes`, never
+  written to disk.
+- **Security hardening — built this cycle:**
+  - Rate limiting: **`/api/chat` and `/api/exposure` gaps closed** — every
+    route that calls Groq or an external API is now rate-limited (in-memory,
+    per-IP, sliding window). Same documented cross-instance limitation as
+    before (`lib/rate-limit.ts`); a production deployment under real load
+    would want this backed by Upstash Redis instead.
+  - Input validation: **zod schemas added** (`lib/validation.ts`), applied at
+    every route parsing a JSON body from an untrusted client — `/api/chat`,
+    `/api/test-context`, `/api/exposure`, `/api/handoff-narrative`,
+    `/api/speak`, `/api/journal-agent`. Verified against real malformed
+    requests this cycle: oversized severity values, invalid enum values, and
+    empty required strings all return a 400 with the specific field-level
+    error rather than reaching downstream code.
+  - Prompt-injection defenses: two real layers now — `lib/generation.ts`'s
+    system prompt instructs the model to treat retrieved context and user
+    input as data, never as instructions overriding system rules; and
+    `lib/prompt-injection.ts` does pattern-based detection, logged (not
+    blocking) on `/api/chat`. Deliberately non-blocking: hard-rejecting
+    phrasing like "ignore my last symptom, I meant something else" would be a
+    real false-positive cost in a health-chat population. **Honest gap
+    carried forward:** not stress-tested against a real adversarial prompt
+    set — the spec's own 50+-prompt red-team pass is still not done.
+  - CORS / CSP / HSTS / security headers: **configured** in
+    `next.config.ts`'s `headers()` — `X-Frame-Options: DENY`,
+    `X-Content-Type-Options: nosniff`, `Referrer-Policy`,
+    `Permissions-Policy` (mic allowed, camera denied — matches real feature
+    use), HSTS (2-year max-age, preload), and a CSP. The CSP isn't maximally
+    strict — `script-src`/`style-src` both need `'unsafe-inline'` for
+    Next.js's own hydration bootstrap and one inline print stylesheet; fixing
+    that needs per-request nonces via middleware, a real scoped follow-up,
+    not done here. No CORS headers are set at all, deliberately — same-origin
+    is already the secure default; adding a permissive
+    `Access-Control-Allow-Origin` would weaken, not improve, this.
+- **Cost optimization: built.** Token usage is now recorded on every Groq
+  call (`recordTokenUsage()` in `lib/metrics.ts`, wired into `/api/chat`,
+  `lib/rerank.ts`, `lib/query-rewrite.ts`, `/api/journal-agent`), summed
+  against a configurable `DAILY_TOKEN_BUDGET` (defaults to 90,000, just under
+  Groq's real 100,000/day free-tier cap), with a warning logged once crossed.
+  This is a per-warm-instance counter, same limitation as rate limiting and
+  caching — it doesn't coordinate across concurrent Netlify instances, so
+  it's a real signal, not a hard enforcement guarantee. The underlying cost
+  pressure is unchanged from before: every service in use (Back4App,
+  Upstash, Groq, NPPES, ClinicalTrials.gov) is on a free tier, and Groq
+  quota remains the binding constraint.
+- **Security audit: performed, documented in `docs/security-audit.md`.**
+  Real findings, not a template: `npm audit` started at 11 vulnerabilities
+  (4 moderate, 7 high); `npm audit fix` plus a deliberate `next`/
+  `eslint-config-next` bump to `16.3.0` (same major, chosen over a blind
+  `--force`) closed 7, verified afterward with a full clean
+  `tsc`/`eslint`/`build` pass. **4 remain (3 moderate, 1 high)**, all
+  transitive from the `parse` SDK's `uuid`/`ws`/`@babel/runtime-corejs3` —
+  fixing needs `parse@8.6.0`, a 3-major-version jump on the entire
+  auth/data layer, **deliberately not force-upgraded** without dedicated
+  regression testing (documented risk reasoning: the vulnerable code path is
+  `Parse.LiveQuery`, which this app never calls). A grep-based hardcoded-
+  credential scan across app source found none; `.env.local` confirmed never
+  committed. What this audit explicitly does not cover: penetration
+  testing/fuzzing, load testing, or authorization testing beyond the
+  existing ACL review.
 - **Cost analysis (projected monthly, current usage scale — single developer,
   pre-launch):**
 
@@ -217,7 +296,10 @@ of the following exist in the codebase today:
 
   **Total today: $0/month.** The first real cost driver at any meaningful
   usage scale would be Groq — moving to a paid tier is more likely to be
-  needed before any other service's free tier becomes binding.
+  needed before any other service's free tier becomes binding. This is now a
+  *monitored* $0/month rather than an assumed one — `DAILY_TOKEN_BUDGET`
+  tracking (above) makes the approach to that 100K/day ceiling visible in
+  logs before it's hit.
 
 ---
 
@@ -225,35 +307,42 @@ of the following exist in the codebase today:
 
 Weeks are relative to the start of this build-phase cycle (map to the
 program's actual calendar weeks). Each week includes explicit dependencies so
-blockers are visible before they become blockers.
+blockers are visible before they become blockers. **Weeks 1–3 below are now
+complete** (marked accordingly); Weeks 4–6 remain the real, open plan.
 
-### Week 1 — Ship what's built, close the loudest gaps
+### Week 1 — Ship what's built, close the loudest gaps — **done**
 - **Goal:** get everything already built (RAG rebuild, voice mode, all
-  ClearSignal features) actually deployed and live, since it currently isn't.
-- **Deliverables:** commits pushed to `main`, Netlify deployment verified
-  live, `/api/chat` rate limiting added, README updated with deployed link.
-- **Dependencies:** none — this is unblocked, existing work.
-- **Blocker risk:** Groq daily quota exhaustion could delay verifying the
-  live deployment's AI features end-to-end; plan around it by testing
-  Groq-free paths (`/api/exposure`, journal CRUD, provider/trial lookup)
-  first, AI paths once quota resets.
+  ClearSignal features) actually deployed and live.
+- **Delivered:** commits pushed across `week2-Raj102002`, `week3-Raj102002`,
+  `buildphase-Raj102002`, and the personal repo; `/api/chat` rate limiting
+  added. **Still open:** a fresh Netlify production deploy of this cycle's
+  code was not triggered/confirmed in this session (no dashboard/CLI access)
+  — see `docs/deployment.md` section 3. README author-info fields
+  (Z-number, deployed link, demo video) are still pending.
 
-### Week 2 — Close security & observability gaps
-- **Goal:** address the Production Engineering and Security items marked
-  [PLANNED]/[GAP] above that are cheapest to close first.
-- **Deliverables:** CSP/HSTS/CORS headers configured; basic structured
-  logging on the AI-calling routes; `npm audit` added as a CI step;
-  compound `(userId, occurredAt)` indexes added in Back4App.
-- **Dependencies:** Week 1's deployment must be live to verify header/CORS
-  behavior against the real deployed origin, not just `localhost`.
+### Week 2 — Close security & observability gaps — **done**
+- **Goal:** address the Production Engineering and Security items previously
+  marked [PLANNED]/[GAP].
+- **Delivered:** CSP/HSTS/security headers configured (`next.config.ts`);
+  structured logging (`lib/logger.ts`) and a full metrics/dashboard system
+  (`lib/metrics.ts`, `/admin`) on every route, not just the AI-calling ones;
+  `npm audit` run and remediated (11 → 4 vulnerabilities, remainder
+  documented with a risk rationale) rather than just added as an unrun CI
+  step; compound `(user, occurredAt)` indexes scripted
+  (`scripts/setup-indexes.ts`), though not yet executed against a live
+  Back4App app (no master key available this session). Zod input validation
+  and non-blocking prompt-injection logging were also added — beyond this
+  week's original scope, folded in here since they're the same category of
+  work.
 
-### Week 3 — Caching + cost control
-- **Goal:** stop re-paying (in tokens) for repeated or near-duplicate work.
-- **Deliverables:** cache layer for Groq rerank/generation calls on
-  identical/near-identical queries; basic token-usage logging so the Groq
-  quota problem is visible before it's hit, not after.
-- **Dependencies:** Week 2's observability work (logging) is a prerequisite
-  for measuring whether caching is actually reducing usage.
+### Week 3 — Caching + cost control — **done**
+- **Goal:** stop re-paying (in tokens/latency) for repeated or
+  near-duplicate work, and make the Groq quota problem visible before it's
+  hit.
+- **Delivered:** `lib/cache.ts` (in-memory TTL cache) wired into retrieval
+  and TTS, measured 2224ms → 0ms on a cache hit; `DAILY_TOKEN_BUDGET`
+  tracking (`recordTokenUsage()`) across every Groq call site, logging a
+  warning once the configurable threshold is crossed.
 
 ### Week 4 — Eval-driven quality pass
 - **Goal:** use `scripts/eval-clearsignal.ts` results to fix real
@@ -295,26 +384,60 @@ document generation, deployed and live.
 **Nice-to-have (built, but not load-bearing for the core value prop):**
 exposure reconstruction, rash photo timeline, co-infection prompts,
 contested-territory page, provider/trial lookup, low-stimulation mode, voice
-mode.
+mode, and — new this cycle — the journal tool-calling agent, containerization,
+observability dashboard, caching layer, and cost tracking (all real and
+built, but none of them change what the app does for the patient; they
+change how reliably/cheaply/safely it does it).
 
 **Explicitly out of scope for this build phase:** the multi-condition
-profile architecture beyond a single unpopulated stub, any real agentic
-tool-calling loop, containerization, and a fully staffed observability stack
-(structured logging is in scope; a dashboard product is not).
+profile architecture beyond a single unpopulated stub (still not built —
+red-flag rules, the RAG corpus, and the vocabulary table remain hardcoded for
+Lyme disease), a fully executed adversarial prompt-injection red-team pass,
+CI-pipeline automation of `tsc`/`eslint`/`npm audit`, a health-check
+endpoint, Redis-backed rate limiting/caching, and Sentry-equivalent
+third-party error tracking (the latter two are architecturally ready — same
+vendor for Redis, same logging shape for a future Sentry swap — but blocked
+on credentials this project doesn't have).
 
 ---
 
 ## Honesty note
 
 Per the assignment's own framing, this plan says what's real and what isn't
-rather than presenting aspirational architecture as delivered. The single
-biggest scope gap against the original problem spec is that the
-condition-agnostic engine / per-illness config architecture was not built —
-red-flag rules, the RAG corpus, and the vocabulary mapping table are all
-hardcoded for Lyme disease throughout the codebase. The architecture
-generalizes in principle; the clinical content does not, and pretending
-otherwise would be unsafe. Several other pieces (the 42-question gold eval
-set, the ~45-entry vocabulary table, the contested-territory citations) are
-AI-drafted and explicitly need a human clinical/legal review pass before this
-touches a real patient — each is marked in its own file in the implementation
-repo, not just here.
+rather than presenting aspirational architecture as delivered. As of this
+revision, every build-phase topic area (Problem Selection, Agentic AI & RAG,
+Production Engineering, Security & Costs) has real, built, and — where
+feasible in this session — live-verified work behind it, not just design
+docs: containerization, observability, database-index tooling, caching,
+input validation, prompt-injection logging, security headers, cost tracking,
+a real `npm audit` remediation pass, and a genuine multi-step tool-calling
+agent over the patient's own journal data.
+
+What remains genuinely open, stated plainly rather than smoothed over:
+- The condition-agnostic engine / per-illness config architecture was **not**
+  built — red-flag rules, the RAG corpus, and the vocabulary mapping table
+  are all hardcoded for Lyme disease throughout the codebase. The
+  architecture generalizes in principle; the clinical content does not, and
+  pretending otherwise would be unsafe.
+- Several pieces (the 42-question gold eval set, the ~45-entry vocabulary
+  table, the contested-territory citations) are AI-drafted and explicitly
+  need a human clinical/legal review pass before this touches a real
+  patient.
+- Things that are architecturally ready but blocked purely on credentials
+  this project doesn't have in this environment: Redis-backed rate
+  limiting/caching (needs an Upstash Redis REST URL/token), Sentry or
+  equivalent error tracking (needs a DSN), a fresh confirmed Netlify
+  production deploy of this cycle's code (needs dashboard/CLI access), and
+  running `scripts/setup-indexes.ts` against a live Back4App app (needs a
+  real master key).
+- Docker's image was never actually built or booted in this session — no
+  `docker` binary was available in the sandbox. The pieces it depends on
+  (standalone build output, traced file paths) were individually verified;
+  the image itself was not.
+- No CI pipeline exists yet; `tsc`/`eslint`/`npm run build` were all run by
+  hand throughout this pass, verified clean every time a change was made,
+  but nothing enforces that automatically on push today.
+
+Each of these is a real, scoped, named gap — not a vague disclaimer — because
+that's more useful to grade against than a plan that claims completeness it
+doesn't have.

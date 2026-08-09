@@ -3,13 +3,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { NARRATIVE_SYSTEM_PROMPT, validateNarrative, buildTemplatedNarrative } from "@/lib/handoff-narrative";
 import type { HandoffAnalysis } from "@/lib/handoff-analysis";
 import { checkRateLimit, clientKeyFrom } from "@/lib/rate-limit";
+import { withMetrics, recordTokenUsage } from "@/lib/metrics";
+import { handoffNarrativeRequestSchema, formatZodError } from "@/lib/validation";
 
 const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const RATE_LIMIT = 10;
 const RATE_WINDOW_MS = 10 * 60 * 1000;
 
-export async function POST(request: NextRequest) {
+export const POST = withMetrics("handoff-narrative", async (request: NextRequest) => {
   const { allowed, retryAfterSeconds } = checkRateLimit(`handoff-narrative:${clientKeyFrom(request)}`, RATE_LIMIT, RATE_WINDOW_MS);
   if (!allowed) {
     return NextResponse.json(
@@ -19,11 +21,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
-    const analysis = body.analysis as HandoffAnalysis | undefined;
-    if (!analysis) {
-      return NextResponse.json({ error: "analysis is required" }, { status: 400 });
+    const rawBody = await request.json();
+    const parsed = handoffNarrativeRequestSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
     }
+    const analysis = parsed.data.analysis as unknown as HandoffAnalysis;
 
     const templated = buildTemplatedNarrative(analysis);
 
@@ -42,6 +45,9 @@ export async function POST(request: NextRequest) {
           { role: "user", content: `DATA:\n${JSON.stringify(analysis, null, 2)}` },
         ],
       });
+      if (completion.usage) {
+        recordTokenUsage(completion.usage.prompt_tokens ?? 0, completion.usage.completion_tokens ?? 0);
+      }
       const generated = completion.choices[0]?.message?.content?.trim();
       if (generated) {
         const { valid } = validateNarrative(generated);
@@ -58,4 +64,4 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});
