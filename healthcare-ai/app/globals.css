@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+html,
+body {
+  height: 100%;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 5px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Low-stimulation mode (lib/low-stim.ts sets this attribute on <html>).
+   Single global rule set rather than per-component overrides, deliberately —
+   this needs to apply everywhere uniformly, including pages added later. */
+html[data-low-stim="true"] * {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+html[data-low-stim="true"] {
+  filter: saturate(0.55);
+}
+html[data-low-stim="true"] body {
+  line-height: 1.75;
+}
+html[data-low-stim="true"] button,
+html[data-low-stim="true"] a,
+html[data-low-stim="true"] input,
+html[data-low-stim="true"] select,
+html[data-low-stim="true"] textarea {
+  min-height: 44px;
+}

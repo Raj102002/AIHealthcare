@@ -1,0 +1,555 @@
+"use client";
+
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import {
+  Send,
+  Heart,
+  LayoutDashboard,
+  LogOut,
+  Loader2,
+  RefreshCw,
+  Trash2,
+  Headphones,
+  TestTube2,
+  NotebookPen,
+} from "lucide-react";
+import {
+  getCurrentUser,
+  getUserProfile,
+  logoutUser,
+  saveConversation,
+  initializeParse,
+} from "@/lib/parse-client";
+import { detectEmergency } from "@/lib/emergency-detector";
+import { extractCompleteSentences } from "@/lib/speech-sanitize";
+import EmergencyBanner from "@/components/EmergencyBanner";
+import ChatMessage from "@/components/ChatMessage";
+import HealthLogForm from "@/components/HealthLogForm";
+import UserProfilePanel from "@/components/UserProfilePanel";
+import MicButton from "@/components/MicButton";
+import VoiceOrb from "@/components/VoiceOrb";
+import VoiceDisclosure from "@/components/VoiceDisclosure";
+import LowStimToggle from "@/components/LowStimToggle";
+import { useSpeechOutput } from "@/hooks/useSpeechOutput";
+import { useVoiceInput, type VoiceInputError } from "@/hooks/useVoiceInput";
+import type { Message, UserProfile } from "@/types/health";
+
+const WELCOME: Message = {
+  id: "welcome",
+  role: "assistant",
+  content:
+    "Hello! I'm your HealthAI Assistant. I can help with general health questions, symptom information, and wellness guidance.\n\n⚕️ Important: I provide general information only — I'm not a substitute for professional medical advice. For any medical concerns, please consult a qualified healthcare provider.\n\nHow can I help you today? Please describe what you're experiencing, and I'll ask a few follow-up questions to better understand your situation.",
+  timestamp: new Date().toISOString(),
+};
+
+const VOICE_DISCLOSURE_KEY = "healthai_voice_disclosure_seen";
+
+export default function ChatPage() {
+  const router = useRouter();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [messages, setMessages] = useState<Message[]>([WELCOME]);
+  const [input, setInput] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [showEmergency, setShowEmergency] = useState(false);
+  const [lastSymptoms, setLastSymptoms] = useState("");
+  const [conversationSaved, setConversationSaved] = useState(false);
+  const [conversationMode, setConversationMode] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [showVoiceDisclosure, setShowVoiceDisclosure] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const voiceTriggeredRef = useRef(false);
+  const spokenUpToRef = useRef(0);
+  const conversationModeRef = useRef(false);
+  const disclosureSeenRef = useRef(true);
+  const wasSpeakingRef = useRef(false);
+
+  const { isSpeaking, beginStream, enqueueSentence, speak, stop: stopSpeaking, unlock } = useSpeechOutput();
+
+  const handleVoiceTranscript = useCallback((text: string) => {
+    voiceTriggeredRef.current = true;
+    setInput(text);
+    inputRef.current?.focus();
+  }, []);
+
+  const handleVoiceError = useCallback((error: VoiceInputError) => {
+    setVoiceError(error.message);
+  }, []);
+
+  const { state: voiceState, level: voiceLevel, start: startVoice, stop: stopVoice } = useVoiceInput({
+    language: profile?.preferredLanguage,
+    onTranscript: handleVoiceTranscript,
+    onError: handleVoiceError,
+  });
+
+  useEffect(() => {
+    initializeParse();
+    const user = getCurrentUser();
+    if (!user) {
+      router.replace("/");
+      return;
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- profile read depends on browser-only Parse SDK state, must stay effect-gated
+    setProfile(getUserProfile());
+  }, [router]);
+
+  useEffect(() => {
+    disclosureSeenRef.current = typeof window !== "undefined" && localStorage.getItem(VOICE_DISCLOSURE_KEY) === "true";
+  }, []);
+
+  useEffect(() => {
+    conversationModeRef.current = conversationMode;
+  }, [conversationMode]);
+
+  useEffect(() => {
+    if (!voiceError) return;
+    const t = setTimeout(() => setVoiceError(null), 6000);
+    return () => clearTimeout(t);
+  }, [voiceError]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Hands-free conversation mode: once the assistant finishes speaking, start
+  // listening again automatically instead of making the user re-tap the mic. The
+  // transcript still lands in the composer for review — this only skips the
+  // re-tap, it never skips the review-before-send step.
+  useEffect(() => {
+    if (wasSpeakingRef.current && !isSpeaking && conversationModeRef.current && voiceState === "idle" && !streaming) {
+      startVoice();
+    }
+    wasSpeakingRef.current = isSpeaking;
+  }, [isSpeaking, streaming, voiceState, startVoice]);
+
+  const sendMessage = useCallback(async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim();
+    if (!text || streaming) return;
+
+    const wasVoiceTriggered = voiceTriggeredRef.current;
+    voiceTriggeredRef.current = false;
+    spokenUpToRef.current = 0;
+    if (wasVoiceTriggered) beginStream(profile?.preferredLanguage);
+
+    const isEmergency = detectEmergency(text);
+    if (isEmergency) setShowEmergency(true);
+    setLastSymptoms(text);
+
+    const userMsg: Message = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: text,
+      timestamp: new Date().toISOString(),
+    };
+
+    setMessages((prev) => [...prev, userMsg]);
+    setInput("");
+    setStreaming(true);
+
+    const assistantId = crypto.randomUUID();
+    const assistantMsg: Message = {
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      timestamp: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, assistantMsg]);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const apiMessages = [...messages, userMsg]
+        .filter((m) => m.id !== "welcome")
+        .map((m) => ({ role: m.role, content: m.content }));
+
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: apiMessages,
+          userProfile: profile
+            ? {
+                allergies: profile.allergies,
+                conditions: profile.conditions,
+                medications: profile.medications,
+                age: profile.age,
+                bloodType: profile.bloodType,
+                preferredLanguage: profile.preferredLanguage,
+              }
+            : undefined,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        throw new Error(`API error: ${res.status}`);
+      }
+
+      const sourcesHeader = res.headers.get("X-RAG-Sources");
+      if (sourcesHeader) {
+        try {
+          const sources = JSON.parse(atob(sourcesHeader)) as Message["sources"];
+          if (sources?.length) {
+            setMessages((prev) =>
+              prev.map((m) => (m.id === assistantId ? { ...m, sources } : m))
+            );
+          }
+        } catch {
+          // Malformed/missing sources header shouldn't block the answer itself.
+        }
+      }
+
+      const coinfectionHeader = res.headers.get("X-Coinfection-Notes");
+      if (coinfectionHeader) {
+        try {
+          const coinfectionNotes = JSON.parse(atob(coinfectionHeader)) as Message["coinfectionNotes"];
+          if (coinfectionNotes?.length) {
+            setMessages((prev) =>
+              prev.map((m) => (m.id === assistantId ? { ...m, coinfectionNotes } : m))
+            );
+          }
+        } catch {
+          // Same — non-critical, shouldn't block the answer.
+        }
+      }
+
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      let full = "";
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          full += chunk;
+
+          const hasEmergency = /^\[EMERGENCY\]/i.test(full);
+          if (hasEmergency) setShowEmergency(true);
+
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId
+                ? { ...m, content: full, isEmergency: hasEmergency }
+                : m
+            )
+          );
+
+          if (wasVoiceTriggered) {
+            const { sentences, consumedUpTo } = extractCompleteSentences(full, spokenUpToRef.current);
+            if (sentences.length > 0) {
+              spokenUpToRef.current = consumedUpTo;
+              for (const s of sentences) enqueueSentence(s);
+            }
+          }
+        }
+      }
+
+      if (wasVoiceTriggered) {
+        const trailing = full.slice(spokenUpToRef.current).trim();
+        if (trailing) enqueueSentence(trailing);
+      }
+    } catch (err: unknown) {
+      if ((err as Error).name !== "AbortError") {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? {
+                  ...m,
+                  content:
+                    "Sorry, I encountered an error. Please try again. If this is an emergency, call 911 immediately.",
+                }
+              : m
+          )
+        );
+      }
+    } finally {
+      setStreaming(false);
+      abortRef.current = null;
+    }
+  }, [input, streaming, messages, profile, beginStream, enqueueSentence]);
+
+  const handleMicStart = useCallback(() => {
+    unlock();
+    if (!disclosureSeenRef.current) {
+      setShowVoiceDisclosure(true);
+      disclosureSeenRef.current = true;
+      if (typeof window !== "undefined") localStorage.setItem(VOICE_DISCLOSURE_KEY, "true");
+    }
+    startVoice();
+  }, [unlock, startVoice]);
+
+  const handleBargeIn = useCallback(() => {
+    stopSpeaking();
+  }, [stopSpeaking]);
+
+  async function handleSaveConversation() {
+    try {
+      const toSave = messages.filter((m) => m.id !== "welcome");
+      if (!toSave.length) return;
+      const firstUser = toSave.find((m) => m.role === "user");
+      await saveConversation({
+        title: firstUser?.content.slice(0, 60) || "Health conversation",
+        messages: toSave.map((m) => ({ role: m.role, content: m.content })),
+      });
+      setConversationSaved(true);
+      setTimeout(() => setConversationSaved(false), 3000);
+    } catch (err) {
+      console.error("Failed to save conversation:", err);
+    }
+  }
+
+  function handleNewChat() {
+    abortRef.current?.abort();
+    setMessages([WELCOME]);
+    setShowEmergency(false);
+    setLastSymptoms("");
+    setConversationSaved(false);
+  }
+
+  async function handleLogout() {
+    await logoutUser();
+    router.replace("/");
+  }
+
+  if (!profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-teal-600" />
+      </div>
+    );
+  }
+
+  const voiceStatus = isSpeaking
+    ? "Speaking response"
+    : voiceState === "listening"
+    ? "Listening"
+    : voiceState === "transcribing"
+    ? "Transcribing your question"
+    : streaming
+    ? "Thinking"
+    : "";
+
+  return (
+    <div className="h-screen flex flex-col bg-slate-50">
+      <div className="sr-only" role="status" aria-live="polite">
+        {voiceStatus}
+      </div>
+
+      {showEmergency && (
+        <EmergencyBanner onDismiss={() => setShowEmergency(false)} />
+      )}
+      {showVoiceDisclosure && (
+        <VoiceDisclosure onDismiss={() => setShowVoiceDisclosure(false)} />
+      )}
+
+      {/* Top nav */}
+      <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center">
+            <Heart className="w-4 h-4 text-white" fill="white" />
+          </div>
+          <span className="font-semibold text-slate-900">HealthAI</span>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <Link
+            href="/journal"
+            className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-teal-600 px-3 py-1.5 rounded-lg hover:bg-teal-50 transition-colors"
+          >
+            <NotebookPen className="w-4 h-4" />
+            <span className="hidden sm:inline">Journal</span>
+          </Link>
+          <Link
+            href="/test-context"
+            className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-teal-600 px-3 py-1.5 rounded-lg hover:bg-teal-50 transition-colors"
+          >
+            <TestTube2 className="w-4 h-4" />
+            <span className="hidden sm:inline">Test Timing</span>
+          </Link>
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-teal-600 px-3 py-1.5 rounded-lg hover:bg-teal-50 transition-colors"
+          >
+            <LayoutDashboard className="w-4 h-4" />
+            <span className="hidden sm:inline">Dashboard</span>
+          </Link>
+          <LowStimToggle />
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-red-600 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            <span className="hidden sm:inline">Sign Out</span>
+          </button>
+        </div>
+      </header>
+
+      {/* Main layout */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar */}
+        <aside className="hidden lg:flex flex-col w-72 border-r border-slate-200 bg-white overflow-y-auto scrollbar-thin p-4 gap-4 shrink-0">
+          <div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+              Signed in as
+            </p>
+            <p className="text-sm font-medium text-slate-800">{profile.username}</p>
+          </div>
+
+          <UserProfilePanel
+            profile={profile}
+            onUpdated={(updated) =>
+              setProfile((prev) => prev ? { ...prev, ...updated } : prev)
+            }
+          />
+
+          <HealthLogForm prefillSymptoms={lastSymptoms} />
+
+          <div className="mt-auto space-y-2">
+            <button
+              onClick={handleSaveConversation}
+              className="w-full flex items-center justify-center gap-2 text-sm text-slate-600 hover:text-teal-600 py-2 border border-slate-200 rounded-xl hover:border-teal-300 transition-colors"
+            >
+              {conversationSaved ? "✓ Saved!" : "Save Conversation"}
+            </button>
+            <button
+              onClick={handleNewChat}
+              className="w-full flex items-center justify-center gap-2 text-sm text-slate-600 hover:text-slate-800 py-2 border border-slate-200 rounded-xl hover:border-slate-300 transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              New Chat
+            </button>
+          </div>
+
+          <div className="text-xs text-slate-400 text-center pt-2 border-t border-slate-100">
+            ⚕️ General wellness info only. Not medical advice.
+          </div>
+        </aside>
+
+        {/* Chat area */}
+        <main className="flex flex-col flex-1 overflow-hidden">
+          <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-4">
+            <div className="max-w-2xl mx-auto">
+              {messages.map((msg) => (
+                <ChatMessage
+                  key={msg.id}
+                  message={msg}
+                  onSpeak={(text) => speak(text, profile?.preferredLanguage)}
+                />
+              ))}
+              {streaming && messages[messages.length - 1]?.content === "" && (
+                <div className="flex gap-3 mb-4">
+                  <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center">
+                    <Loader2 className="w-4 h-4 text-slate-500 animate-spin" />
+                  </div>
+                  <div className="bg-white border border-slate-100 shadow-sm rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-slate-400">
+                    Thinking...
+                  </div>
+                </div>
+              )}
+              <div ref={bottomRef} />
+            </div>
+          </div>
+
+          {/* Disclaimer bar */}
+          <div className="bg-amber-50 border-t border-amber-100 px-4 py-1.5 flex items-center justify-center gap-3 text-center text-xs text-amber-700">
+            <span>⚕️ This AI provides general information only — not a substitute for professional medical advice.</span>
+            <VoiceOrb active={isSpeaking} label={voiceStatus || "Speaking..."} />
+          </div>
+
+          {voiceError && (
+            <div className="bg-red-50 border-t border-red-100 px-4 py-1.5 text-center text-xs text-red-700" role="alert">
+              {voiceError}
+            </div>
+          )}
+
+          {/* Input area */}
+          <div className="bg-white border-t border-slate-200 px-4 py-3">
+            <div className="max-w-2xl mx-auto">
+              <div className="flex gap-2 items-end">
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      sendMessage();
+                    }
+                  }}
+                  placeholder="Describe your symptoms or ask a health question… (Enter to send)"
+                  rows={1}
+                  className="flex-1 resize-none px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition max-h-32 scrollbar-thin"
+                  style={{ minHeight: "44px" }}
+                />
+                <div className="flex gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setConversationMode((v) => !v)}
+                    disabled={streaming}
+                    title={conversationMode ? "Turn off hands-free conversation mode" : "Turn on hands-free conversation mode"}
+                    aria-label="Toggle hands-free conversation mode"
+                    aria-pressed={conversationMode}
+                    className={`p-2.5 rounded-xl transition-colors shrink-0 ${
+                      conversationMode
+                        ? "bg-teal-100 text-teal-700 hover:bg-teal-200"
+                        : "bg-slate-100 hover:bg-slate-200 text-slate-600 disabled:opacity-50"
+                    }`}
+                  >
+                    <Headphones className="w-4 h-4" />
+                  </button>
+                  <MicButton
+                    state={voiceState}
+                    level={voiceLevel}
+                    isSpeaking={isSpeaking}
+                    onStart={handleMicStart}
+                    onStop={stopVoice}
+                    onBargeIn={handleBargeIn}
+                    disabled={streaming}
+                  />
+                  {streaming && (
+                    <button
+                      onClick={() => abortRef.current?.abort()}
+                      className="p-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 transition-colors"
+                      title="Stop"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => sendMessage()}
+                    disabled={!input.trim() || streaming}
+                    className="p-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:bg-teal-200 text-white transition-colors"
+                    title="Send"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Mobile quick actions */}
+              <div className="flex gap-2 mt-2 lg:hidden">
+                <button
+                  onClick={handleNewChat}
+                  className="flex-1 text-xs text-slate-500 py-1.5 border border-slate-200 rounded-lg hover:border-slate-300 transition-colors"
+                >
+                  New Chat
+                </button>
+                <button
+                  onClick={handleSaveConversation}
+                  className="flex-1 text-xs text-slate-500 py-1.5 border border-slate-200 rounded-lg hover:border-slate-300 transition-colors"
+                >
+                  {conversationSaved ? "✓ Saved" : "Save Chat"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
