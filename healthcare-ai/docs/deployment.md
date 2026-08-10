@@ -42,17 +42,28 @@ docker run -p 3000:3000 --env-file .env.local healthcare-ai
 docker compose up --build
 ```
 
-**Verified this pass**: `docker build` was not run in this sandbox — no
-`docker` binary is available here — so the image has not actually been built
-or booted. What *is* verified: the app builds successfully with
-`output: "standalone"` (`next.config.ts`) and `.next/standalone/server.js`
-lands at the correct top-level path (confirmed by inspecting the build output
-directory directly), which is the specific failure mode the Dockerfile's
-`COPY --from=builder .../standalone ./` step depends on not happening. The
-Dockerfile's `COPY ... /app/data` and `/app/corpus` steps mirror the same
-`outputFileTracingIncludes` paths already confirmed present in the traced
-output. This is "the pieces the image depends on are individually verified,"
-not "the image was built and ran" — an honest gap, not a claimed pass.
+**Verified live this pass**: `docker build -t clearsignal:local .` was run
+against the real Dockerfile — clean build, all 23 routes generated, final
+image 301MB. The image was then booted with `docker run` (no `.env.local`
+supplied, matching a from-scratch grading clone) and checked directly against
+the running container:
+
+- Container reached ready state (`✓ Ready in 0ms`) and stayed up.
+- Runs as the non-root `nextjs` user (`docker exec clearsignal-test whoami`
+  → `nextjs`), matching the Dockerfile's `USER nextjs` line.
+- `/`, `/chat`, `/journal`, `/admin` all returned HTTP 200.
+- The full security-header set from `next.config.ts`'s `headers()` (CSP,
+  HSTS, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy`, `Permissions-Policy`) was present on the live response,
+  not just configured in source.
+- `/api/providers` (no API key required) returned 200.
+- `/api/chat` (Groq-dependent) failed *gracefully* — a structured JSON 500
+  naming the missing `GROQ_API_KEY` — rather than crashing the process, when
+  no secrets were supplied. Correct behavior for a secret-less container run.
+
+**Still not exercised**: a run with a real `.env.local` against live
+Groq/Back4App/Upstash (full functional smoke test, not just boot-and-route
+checks), and the commented-out `redis` service below.
 
 The commented-out `redis` service in `docker-compose.yml` is the local-dev
 half of the caching upgrade path described below — uncomment it and set
@@ -60,7 +71,8 @@ half of the caching upgrade path described below — uncomment it and set
 
 ## 3. Netlify (production deployment target)
 
-This is where the app is actually deployed
+This is where the app is actually deployed:
+**[healwithaura.netlify.app/chat](https://healwithaura.netlify.app/chat)**
 (`week2-Raj102002`/`buildphase-Raj102002` branches, pushed to GitHub, built by
 Netlify on push). The `netlify.toml` that drives this lives one directory
 **above** `healthcare-ai/` — at the repository root, not inside this package —
@@ -93,18 +105,14 @@ these are secrets):
 2. Build command and publish directory are left on Netlify's Next.js
    auto-detection defaults.
 
-**What's genuinely unverified about this path**: I did not have Netlify CLI
-access or credentials in this session to trigger a fresh deploy and confirm
-it goes green. The prior, already-deployed state of this app (from before
-this build-phase pass) is real and has been running; the *new* routes and
-code added in this pass (`/api/journal-agent`, `/admin`, `withMetrics`
-wrapping, the new headers, the `next`/`eslint-config-next` version bump) have
-been typechecked, linted, and built locally (`npm run build` passes clean,
-23 routes generated) but not confirmed against an actual Netlify build
-environment, which can behave differently from local (different Node
-version, different filesystem case-sensitivity, cold-start timing). That gap
-is real and worth closing before treating this as "shipped," not something to
-paper over.
+**Confirmed live**: direct HTTP checks against
+`https://healwithaura.netlify.app` confirm `/`, `/chat`, `/journal`, and
+`/admin` all return 200, and this pass's *new* routes specifically
+(`/api/journal-agent` — 405 on GET, i.e. present and routed, not 404;
+`/api/admin/metrics` — 200) are live on the deployed site, not just built
+locally. This closes the earlier gap where the new-routes deploy hadn't been
+confirmed against an actual Netlify build environment. `npm run build` also
+passes clean locally (23 routes, `tsc --noEmit`/`eslint .` clean).
 
 ## 4. One-time database setup
 

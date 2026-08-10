@@ -405,33 +405,39 @@ graph LR
     Docker --> Portable["Portable / self-hosted deploy target<br/>(grading review, local parity — not production)"]
 ```
 
-**Current status: pushed, deploy-confirmation gap remains honest.** All of
-this document's code — the RAG rebuild, every ClearSignal feature, and this
-cycle's Production Engineering/Security/Agentic AI work — is pushed to
-`week2-Raj102002`, `week3-Raj102002`, `buildphase-Raj102002`, and the
-personal repo. **What's not confirmed:** I did not have Netlify
-dashboard/CLI access in this session to trigger a fresh production build and
-confirm it goes green with this cycle's changes (new routes, new headers,
-the `next` version bump). What is confirmed locally: `npm run build`
-produces all 23 routes cleanly, `tsc --noEmit` and `eslint .` are both clean,
-and the individual pieces the deploy depends on (standalone output path,
-traced file includes) were checked directly. See `docs/deployment.md`
-section 3 for the exact scope.
+**Current status: live and confirmed.** All of this document's code — the RAG
+rebuild, every ClearSignal feature, and this cycle's Production
+Engineering/Security/Agentic AI work — is pushed to `week2-Raj102002`,
+`week3-Raj102002`, `buildphase-Raj102002`, and the personal repo, and deployed
+at **[healwithaura.netlify.app/chat](https://healwithaura.netlify.app/chat)**.
+The earlier "deploy not confirmed" gap is closed: direct HTTP checks against
+the live site confirm `/`, `/chat`, `/journal`, and `/admin` all return 200,
+and this cycle's new routes specifically (`/api/journal-agent`,
+`/api/admin/metrics`) are present and responding — not just that *some*
+version of the app is live, but that *this cycle's* code is. `npm run build`
+also produces all 23 routes cleanly locally, and `tsc --noEmit`/`eslint .` are
+both clean. See `docs/deployment.md` section 3.
 
 **CI/CD:** still no automated CI pipeline running `tsc`/`eslint`/`npm audit`/
 the eval scripts on push — `tsc --noEmit`, `eslint .`, and `npm run build`
 were run by hand after every change this cycle (verified clean each time),
 not automated. Named, scoped follow-up work, not done.
 
-**Containerization: now real** — see the `Docker` branch of the diagram
-above. Multi-stage `Dockerfile` targeting `output: "standalone"`,
+**Containerization: real and live-verified** — see the `Docker` branch of the
+diagram above. Multi-stage `Dockerfile` targeting `output: "standalone"`,
 `docker-compose.yml`, `.dockerignore`. This is explicitly the
 portable/reproducibility path for grading review and local parity, not a
-change to the production deployment target (Netlify remains that). **Honest
-gap:** no `docker` binary was available in the sandbox this was built in, so
-the image was never actually built or booted — the standalone build output
-it depends on was verified directly instead. See `docs/deployment.md`
-section 2.
+change to the production deployment target (Netlify remains that). **Gap
+closed:** `docker build -t clearsignal:local .` ran clean (all 23 routes,
+301MB final image), `docker run` booted it without any secrets supplied,
+and live checks against the running container confirmed: non-root `nextjs`
+user, `/`, `/chat`, `/journal`, `/admin` all HTTP 200, every security header
+from `next.config.ts` present on the real response, `/api/providers`
+(keyless) returning 200, and `/api/chat` (Groq-dependent) failing gracefully
+with a structured JSON 500 rather than crashing when `GROQ_API_KEY` is
+absent. See `docs/deployment.md` section 2. Not yet exercised: a run with a
+real `.env.local` against live Groq/Back4App/Upstash, and the optional Redis
+service commented out in `docker-compose.yml`.
 
 ---
 

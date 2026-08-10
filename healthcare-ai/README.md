@@ -1,3 +1,31 @@
+# ClearSignal
+
+| | |
+|---|---|
+| **Name** | Raja Manendra Surisetty |
+| **Z-Number** | Z23879546 |
+| **FAU Email** | rsurisetty2025@fau.edu |
+| **Deployed App** | [healwithaura.netlify.app/chat](https://healwithaura.netlify.app/chat) |
+| **Demo Video** | `[FILL IN — 3-5 min, see plan.md Week 6]` |
+| **Planning Docs** | [`plan.md`](../plan.md), [`design.md`](../design.md) (repo root) |
+
+## Tech Stack
+
+| Layer | Choice |
+|---|---|
+| Frontend | Next.js 16 (App Router, Turbopack), React 19, TypeScript |
+| Backend / DB | Back4App (Parse Server / MongoDB) — full CRUD, ACL-scoped per user |
+| Auth | Parse User (registration, login, session persistence) |
+| AI — LLM | Groq, `llama-3.3-70b-versatile` (chat, rerank, query rewrite, handoff narrative, journal agent tool-calling) |
+| AI — Voice | Groq `whisper-large-v3-turbo` (STT), Groq `playai-tts` (TTS), browser `SpeechSynthesis` fallback |
+| Vector store | Upstash Vector (built-in embedding model, no separate embeddings key) |
+| Keyword search | Hand-rolled Okapi BM25, fused with dense results via Reciprocal Rank Fusion |
+| Validation | zod |
+| Deployment | Netlify (`@netlify/plugin-nextjs`) — production; Docker (multi-stage, `node:20-alpine`) — portable/grading path, built and verified locally |
+| Observability | Structured JSON logging (`lib/logger.ts`) + custom Back4App-backed request metrics (`lib/metrics.ts`) + `/admin` dashboard |
+
+Full rationale for each choice is in [`design.md`](../design.md) section 8.
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## ClearSignal: why this exists

@@ -58,8 +58,8 @@ that never diagnoses.
 | **AI Integration** | Hybrid RAG chat (dense + BM25 + Reciprocal Rank Fusion + LLM rerank), grounded in a CDC Lyme disease corpus, with query rewriting for follow-ups and a hard relevance threshold (empty context → the model says so, never guesses). A separately guarded LLM call generates the clinician-handoff narrative, validated against a banned-phrase/condition-name list with an always-available deterministic template fallback. Voice input (Groq Whisper, domain-vocabulary-seeded) and output (Groq TTS, browser-`SpeechSynthesis` fallback) layer on top. A real agentic feature — `/api/journal-agent`, a Groq tool-calling loop over the patient's own journal data — was also built this cycle (see the updated Agentic AI section below). This is not a bare chatbot wrapper — see `design.md` section 4 for the full component diagram. Rate limiting, loading states, and distinct error messages (permission denied / no microphone / network failure / empty transcript, etc.) are implemented on every AI-calling route, including `/api/chat` and `/api/exposure`, which were the two gaps in the prior pass — **now closed**. |
 | **Backend & Database** | Back4App (Parse Server / MongoDB). Seven classes with full CRUD: `HealthLog`, `Conversation` (pre-existing), `SymptomEntry`, `FunctionEntry`, `TimelineAnchor`, `ClinicalEncounter`, `RashPhoto` (this build-phase cycle). Every write path sets an owner-scoped ACL (`new Parse.ACL(user)`) before saving — verified by direct code review, not assumed. Compound indexes for the journal classes now have a real, idempotent creation script (`scripts/setup-indexes.ts`) — see the updated Database Optimization section. |
 | **Authentication** | Parse User registration/login/session persistence. Every protected page checks `getCurrentUser()` and redirects unauthenticated visitors; ACLs enforce the same boundary server-side regardless of client-side checks. Secrets (`GROQ_API_KEY`, Back4App app/JS keys, `UPSTASH_VECTOR_REST_URL`/`TOKEN`) live in `.env.local`, never committed — `.env.local.example` documents what's needed without real values. |
-| **Documentation** | README covers AI integration, setup instructions, and tech stack. `healthcare-ai/docs/deployment.md` (new this cycle) covers local dev, Docker, Netlify, database setup, eval harness, and observability end to end. **[NEEDS AUTHOR INPUT before submission]**: name, Z-number, FAU email, deployed app link, demo video link. |
-| **Deployment** | Netlify (`netlify.toml` at this repo's root, `base = "healthcare-ai"`). The full ClearSignal codebase, including everything built this cycle, is pushed to this repo. **[GAP, honestly stated]**: I did not have Netlify CLI/dashboard access in this session to trigger and confirm a fresh production deploy of this cycle's changes (new routes, new headers, the `next` version bump) — see `docs/deployment.md` section 3 for the exact scope of what is and isn't verified. What *is* verified locally: `npm run build` passes clean with all 23 routes generated, `tsc --noEmit` and `eslint .` both clean. |
+| **Documentation** | README covers AI integration, setup instructions, and tech stack, plus the required author/link block (name, Z-number, FAU email, deployed link — see `healthcare-ai/README.md`). `healthcare-ai/docs/deployment.md` (new this cycle) covers local dev, Docker, Netlify, database setup, eval harness, and observability end to end. **[OPEN]**: demo video link still pending. |
+| **Deployment** | Live at **[healwithaura.netlify.app/chat](https://healwithaura.netlify.app/chat)** (Netlify, `netlify.toml` at this repo's root, `base = "healthcare-ai"`). **Confirmed live, not just pushed:** `/`, `/chat`, `/journal`, and `/admin` all return HTTP 200, and this cycle's new routes specifically (`/api/journal-agent`, `/api/admin/metrics`, `/admin`) are present on the deployed site (verified via direct HTTP checks, not assumed from the git history) — so the fresh production deploy of this cycle's changes did go out, closing the earlier "not confirmed" gap. |
 | **GitHub Repository** | Implementation history lives in `week2-Raj102002` / `week3-Raj102002` (RAG/voice rebuild, then the ClearSignal pivot, then this build-phase's Production Engineering/Security/Agentic AI pass — each logically-scoped commit explains the *why*, not just the *what*). This repo (`buildphase-Raj102002`) now holds both the planning docs and a synced copy of the implementation, per the later clarification that both were wanted here. |
 | **Demo Video** | **[NOT YET RECORDED]** — scheduled for the week the deployed MVP is stable (see timeline). |
 | **Canvas Submission** | Submitted by the author after this repo is pushed. |
@@ -161,17 +161,26 @@ that never diagnoses.
 All items below were **built and verified this cycle** unless a gap is
 explicitly called out — this replaces the earlier all-[PLANNED] state.
 
-- **Containerization: built.** Multi-stage `Dockerfile` (deps → builder →
-  distroless-style `node:20-alpine` runner, non-root user, `output:
+- **Containerization: built and verified live.** Multi-stage `Dockerfile`
+  (deps → builder → `node:20-alpine` runner, non-root user, `output:
   "standalone"`), `docker-compose.yml`, `.dockerignore`. This targets local
   reproducibility and grading review, not a change of the production
-  deployment target — Netlify remains the actual host. **Honest gap:** no
-  `docker` binary was available in the sandbox this was built in, so the
-  image itself was never actually built or booted. What is verified: the
-  Next.js standalone build the Dockerfile depends on produces `server.js` at
-  the correct top-level path (confirmed directly), and every file path the
-  `COPY` steps reference exists. See `docs/deployment.md` section 2 for the
-  precise scope of what's proven vs. assumed.
+  deployment target — Netlify remains the actual host. **Gap closed this
+  cycle:** `docker build` was run against this exact Dockerfile — clean
+  build, all 23 routes generated, final image 301MB. The image was then
+  booted with `docker run` (no secrets supplied, matching a real
+  clone-and-build-from-scratch grading flow) and checked directly, not just
+  assumed: container came up (`✓ Ready in 0ms`), runs as the non-root
+  `nextjs` user (confirmed via `docker exec ... whoami`), `/`, `/chat`,
+  `/journal`, and `/admin` all returned HTTP 200, the full security-header
+  set from `next.config.ts` (CSP, HSTS, X-Frame-Options, etc.) was present on
+  the live response, a keyless route (`/api/providers`) returned 200, and a
+  Groq-dependent route (`/api/chat`) failed *gracefully* with a clear JSON
+  error rather than crashing when `GROQ_API_KEY` was absent — the correct
+  behavior for a container run without secrets. What's still not exercised:
+  running the container with a real `.env.local` (full functional
+  smoke-test with live Groq/Back4App/Upstash credentials) and
+  `docker-compose.yml`'s optional Redis profile.
 - **Observability: built.** Structured JSON logging (`lib/logger.ts`) plus a
   custom Back4App-backed request-metrics system (`lib/metrics.ts`'s
   `RequestLog` class and `withMetrics()` wrapper, applied to every API
@@ -426,14 +435,19 @@ What remains genuinely open, stated plainly rather than smoothed over:
 - Things that are architecturally ready but blocked purely on credentials
   this project doesn't have in this environment: Redis-backed rate
   limiting/caching (needs an Upstash Redis REST URL/token), Sentry or
-  equivalent error tracking (needs a DSN), a fresh confirmed Netlify
-  production deploy of this cycle's code (needs dashboard/CLI access), and
-  running `scripts/setup-indexes.ts` against a live Back4App app (needs a
-  real master key).
-- Docker's image was never actually built or booted in this session — no
-  `docker` binary was available in the sandbox. The pieces it depends on
-  (standalone build output, traced file paths) were individually verified;
-  the image itself was not.
+  equivalent error tracking (needs a DSN), and running
+  `scripts/setup-indexes.ts` against a live Back4App app (needs a real master
+  key). The Netlify production deploy gap noted in earlier revisions of this
+  document is closed — [healwithaura.netlify.app/chat](https://healwithaura.netlify.app/chat)
+  is live and confirmed to be running this cycle's code (`/admin`,
+  `/api/journal-agent`, `/api/admin/metrics` all respond on the deployed
+  site).
+- Docker's image was built and booted live this cycle (`docker build` +
+  `docker run`, verified against real HTTP responses — see the
+  Containerization item above). What's still not exercised: a full
+  functional run with real secrets (`.env.local`) against live
+  Groq/Back4App/Upstash, and the optional Redis service in
+  `docker-compose.yml`.
 - No CI pipeline exists yet; `tsc`/`eslint`/`npm run build` were all run by
   hand throughout this pass, verified clean every time a change was made,
   but nothing enforces that automatically on push today.
