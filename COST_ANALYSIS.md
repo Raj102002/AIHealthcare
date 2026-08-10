@@ -78,8 +78,6 @@ For low usage (demo only): Free plan covers it.
 |------|-------|--------|
 | Free | $0/month | 100 GB bandwidth, 300 build minutes |
 
-For a demo / class project, Netlify free tier is sufficient.
-
 ---
 
 ## Total Monthly Cost Summary
@@ -96,6 +94,5 @@ For a demo / class project, Netlify free tier is sufficient.
 
 - Chat history is capped at the last N messages to control input token growth
 - Health insights truncate to 20 logs maximum
-- Groq's free tier rate limits (approximately 30 req/min, 14,400 req/day on free) are
-  sufficient for demos; add retry/backoff logic before scaling
+- Groq's free tier rate limits (approximately 30 req/min, 14,400 req/day on free) 
 - Parse ACLs ensure only the owner can query their data, preventing over-fetching
