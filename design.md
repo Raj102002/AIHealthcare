@@ -152,7 +152,7 @@ Given the free-tier daily token limit is easy to exhaust (documented in
 hit. Same per-warm-instance limitation as rate limiting (below): does not
 share state across concurrent Netlify function instances or survive a cold
 start. The Groq generation call itself is intentionally *not* cached — chat
-answers should reflect the live conversation, not a stale cached response.
+answers should reflect the live conversation, not a stale cached response
 
 ---
 
