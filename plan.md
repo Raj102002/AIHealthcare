@@ -326,8 +326,9 @@ complete** (marked accordingly); Weeks 4–6 remain the real, open plan.
   `buildphase-Raj102002`, and the personal repo; `/api/chat` rate limiting
   added. **Still open:** a fresh Netlify production deploy of this cycle's
   code was not triggered/confirmed in this session (no dashboard/CLI access)
-  — see `docs/deployment.md` section 3. README author-info fields
-  (Z-number, deployed link, demo video) are still pending.
+  — see `docs/deployment.md` section 3. README author-info fields (Z-number,
+  deployed link) are filled in; demo video link is still pending (script
+  ready, see Week 6).
 
 ### Week 2 — Close security & observability gaps — **done**
 - **Goal:** address the Production Engineering and Security items previously
@@ -376,13 +377,23 @@ complete** (marked accordingly); Weeks 4–6 remain the real, open plan.
 - **Dependencies:** requires Weeks 1-4's core Lyme implementation to be
   stable, since this is a refactor of working code, not new-feature work.
 
-### Week 6 — Demo prep + buffer
+### Week 6 — Demo prep + buffer — **mostly done**
 - **Goal:** integration testing, demo video recording, final documentation
   pass, buffer for anything that slipped from Weeks 1-5.
-- **Deliverables:** demo video (3-5 min, all features + AI capabilities),
-  final README pass (name/Z-number/FAU email/links), Canvas submission.
-- **Dependencies:** everything above should be feature-complete going into
-  this week; this week is explicitly buffer, not new scope.
+- **Delivered:** root `README.md` rewritten as a central artifact index
+  (deployed app, plan/design docs, eval/security/privacy/cost docs, pitch
+  deck, one-pagers all linked from one place); a 15-slide pitch deck with
+  speaker notes (`artifacts/ClearSignal_Pitch_Deck.pptx`, problem → solution
+  → architecture → results → roadmap → honest limitations); a print-ready
+  one-page showcase handout for attendees
+  (`artifacts/ClearSignal_Showcase_Handout.pptx`); a scene-by-scene demo
+  video script/shot-list (`docs/demo-video-script.md`) timed to 4 minutes;
+  live-deploy spot-check confirmed `/chat` responds. **Still open:** the
+  demo video itself has not been recorded (script is ready — recording,
+  captioning, and uploading is a human-narration step this session can't
+  do), and the deployed app has not had a full manual click-through pass
+  this cycle to catch UI regressions before the showcase. Canvas submission
+  (posting the repo URL) is a manual step for the author.
 
 ### MVP scope vs. nice-to-have
 
@@ -407,6 +418,71 @@ endpoint, Redis-backed rate limiting/caching, and Sentry-equivalent
 third-party error tracking (the latter two are architecturally ready — same
 vendor for Redis, same logging shape for a future Sentry swap — but blocked
 on credentials this project doesn't have).
+
+---
+
+## 4. Pending Work (Not Yet Started)
+
+Specced but not built. Listed here so scope is visible before it becomes
+undocumented work-in-progress.
+
+### 4.1 Pet sentinel + treatment-response window
+
+Full implementation brief: [`healthcare-ai/docs/spec-pet-sentinel-treatment-window.md`](../healthcare-ai/docs/spec-pet-sentinel-treatment-window.md).
+
+- **Pet sentinel** — captures veterinary tick-borne-disease screening results
+  for household dogs/cats as documented exposure evidence (a positive pet
+  screen is lab-confirmed proof ticks are present at the residence, which no
+  human medical intake currently asks about). New `HouseholdAnimal` Parse
+  class; deterministic finding logic (a negative or untested pet never
+  produces a finding — absence of evidence isn't evidence of absence);
+  retrieval-grounded output with the same citation/banned-phrase rules as the
+  rest of the app; a handoff-document line. Estimated ~half a day.
+- **Treatment-response window (Jarisch-Herxheimer)** — flags a deterministic
+  symptom-severity spike in the first 3 days after a logged antibiotic start
+  date (requires a real pre-treatment baseline; never guesses one), so
+  patients who feel worse early in treatment don't wrongly conclude it failed
+  and stop the course. New `TreatmentCourse` Parse class. Hard safety
+  requirement: every output ships the prescriber-contact instruction in the
+  same block as the context, unconditionally, and red-flag rules take
+  precedence and suppress this feature entirely when both fire on the same
+  input. Estimated ~1 day, most of it in eval cases (verifying red-flag
+  precedence and that the model never renders "this is normal" / "it's
+  working" as reassurance) rather than the detection logic itself.
+- Both add cases to `scripts/eval-clearsignal.ts`; after implementation, the
+  eval suite gets re-run and the escalation-recall/citation-validity delta
+  gets recorded, same as every other feature in this app.
+
+### 4.2 Fine-tune MedGemma via QLoRA
+
+**[PLANNED, not started]** — a longer-horizon step after 4.1 lands and the
+eval suite has grown to cover it. Goal: move ClearSignal's generation layer
+off general-purpose hosted inference (Groq `llama-3.3-70b-versatile`) and onto
+a model actually adapted to this domain and this app's constraints (grounded,
+citation-only, never-diagnose phrasing).
+
+- **Base model:** MedGemma (Google's medically-tuned Gemma variant), fine-tuned
+  with QLoRA (4-bit quantized base + low-rank adapters) rather than a full
+  fine-tune — keeps training compute and the resulting artifact small enough
+  to be realistic on this project's budget/hardware.
+- **Training data:** curated from this app's own eval-verified generation
+  outputs — the retrieval-grounded, citation-checked, banned-phrase-validated
+  sentences produced across the RAG chat, handoff-narrative generator, pet
+  sentinel, and treatment-response features — not raw patient journal
+  content. Needs a real curation/review pass before use, same standard
+  already applied to the gold eval set (see Honesty note below).
+- **Open questions, stated plainly rather than assumed solved:** where QLoRA
+  training actually runs (no GPU budget secured yet), how the fine-tuned
+  model's banned-phrase/citation compliance gets measured against the current
+  Groq baseline before any swap is considered, and licensing/redistribution
+  terms for MedGemma itself. None of this is resolved — this section records
+  intent and shape, not a committed timeline.
+- **Success bar before considering a swap:** the fine-tuned model must match
+  or beat the current pipeline's measured numbers (citation validity,
+  escalation recall, red-flag false-positive rate, banned-phrase violation
+  rate) on the full eval suite, not just "sound more natural" — a stylistic
+  improvement is not sufficient justification to replace a model whose safety
+  behavior is already measured and trusted.
 
 ---
 
