@@ -33,6 +33,18 @@ body {
   animation: message-in 220ms ease-out;
 }
 
+@keyframes avatar-bob {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-2px) rotate(-1.5deg);
+  }
+}
+.animate-avatar-bob {
+  animation: avatar-bob 3.4s ease-in-out infinite;
+}
+
 /* Low-stimulation mode (lib/low-stim.ts sets this attribute on <html>).
    Single global rule set rather than per-component overrides, deliberately —
    this needs to apply everywhere uniformly, including pages added later. */
