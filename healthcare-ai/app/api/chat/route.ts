@@ -11,7 +11,7 @@ import { recordRequest, recordTokenUsage } from "@/lib/metrics";
 import { chatRequestSchema, formatZodError } from "@/lib/validation";
 import { flagPromptInjection } from "@/lib/prompt-injection";
 import { logger } from "@/lib/logger";
-import { GROQ_GENERATION_MODEL } from "@/lib/models";
+import { GROQ_GENERATION_MODEL, GROQ_REASONING_EFFORT } from "@/lib/models";
 
 const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -108,7 +108,8 @@ export async function POST(request: NextRequest) {
 
     const stream = await groq.chat.completions.create({
       model: GROQ_GENERATION_MODEL,
-      max_tokens: 1024,
+      max_tokens: 1400,
+      reasoning_effort: GROQ_REASONING_EFFORT,
       messages: [
         { role: "system", content: systemPrompt },
         ...history,

@@ -1,6 +1,6 @@
 import type Groq from "groq-sdk";
 import { recordTokenUsage } from "@/lib/metrics";
-import { GROQ_REWRITE_MODEL } from "@/lib/models";
+import { GROQ_REWRITE_MODEL, GROQ_REASONING_EFFORT } from "@/lib/models";
 
 const REWRITE_MODEL = GROQ_REWRITE_MODEL;
 const HISTORY_TURNS = 3;
@@ -28,7 +28,8 @@ Rewrite the latest user message as a standalone search query that makes sense wi
   try {
     const completion = await groq.chat.completions.create({
       model: REWRITE_MODEL,
-      max_tokens: 128,
+      max_tokens: 220,
+      reasoning_effort: GROQ_REASONING_EFFORT,
       temperature: 0,
       messages: [{ role: "user", content: prompt }],
     });

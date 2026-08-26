@@ -1,7 +1,7 @@
 import Groq from "groq-sdk";
 import type { RetrievedChunk } from "@/types/rag";
 import { recordTokenUsage } from "@/lib/metrics";
-import { GROQ_RERANK_MODEL } from "@/lib/models";
+import { GROQ_RERANK_MODEL, GROQ_REASONING_EFFORT } from "@/lib/models";
 
 // llama-3.1-8b-instant was tried first (cheaper/faster) but reliably ignored explicit
 // disease-mismatch instructions and few-shot examples in this batch-scoring prompt —
@@ -77,6 +77,7 @@ Respond with ONLY a JSON object of the form {"scores": [{"index": 0, "score": 7}
     const completion = await groq.chat.completions.create({
       model: RERANK_MODEL,
       max_tokens: 1024,
+      reasoning_effort: GROQ_REASONING_EFFORT,
       temperature: 0,
       response_format: { type: "json_object" },
       messages: [{ role: "user", content: prompt }],

@@ -1,6 +1,6 @@
 import Groq from "groq-sdk";
 import { NextRequest, NextResponse } from "next/server";
-import { GROQ_GENERATION_MODEL } from "@/lib/models";
+import { GROQ_GENERATION_MODEL, GROQ_REASONING_EFFORT } from "@/lib/models";
 
 const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -73,7 +73,8 @@ Be concise and practical. This is general wellness guidance only.`;
 
     const completion = await getGroq().chat.completions.create({
       model: GROQ_GENERATION_MODEL,
-      max_tokens: 700,
+      max_tokens: 950,
+      reasoning_effort: GROQ_REASONING_EFFORT,
       messages: [
         {
           role: "system",

@@ -5,7 +5,7 @@ import type { HandoffAnalysis } from "@/lib/handoff-analysis";
 import { checkRateLimit, clientKeyFrom } from "@/lib/rate-limit";
 import { withMetrics, recordTokenUsage } from "@/lib/metrics";
 import { handoffNarrativeRequestSchema, formatZodError } from "@/lib/validation";
-import { GROQ_GENERATION_MODEL } from "@/lib/models";
+import { GROQ_GENERATION_MODEL, GROQ_REASONING_EFFORT } from "@/lib/models";
 
 const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -39,7 +39,8 @@ export const POST = withMetrics("handoff-narrative", async (request: NextRequest
       const groq = getGroq();
       const completion = await groq.chat.completions.create({
         model: GROQ_GENERATION_MODEL,
-        max_tokens: 300,
+        max_tokens: 550,
+        reasoning_effort: GROQ_REASONING_EFFORT,
         temperature: 0,
         messages: [
           { role: "system", content: NARRATIVE_SYSTEM_PROMPT },

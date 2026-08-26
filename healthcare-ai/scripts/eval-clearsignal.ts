@@ -19,7 +19,7 @@ import { fuseCandidates } from "@/lib/retrieval";
 import { rerank } from "@/lib/rerank";
 import { buildContext, buildSystemPrompt } from "@/lib/generation";
 import { fleschKincaidGrade } from "@/lib/readability";
-import { GROQ_GENERATION_MODEL } from "@/lib/models";
+import { GROQ_GENERATION_MODEL, GROQ_REASONING_EFFORT } from "@/lib/models";
 
 const GENERATION_MODEL = GROQ_GENERATION_MODEL;
 const JUDGE_MODEL = GROQ_GENERATION_MODEL;
@@ -133,7 +133,8 @@ Respond with ONLY JSON: {"behavior": "answer", "claims": [{"claim": "...", "verd
   try {
     const completion = await groq.chat.completions.create({
       model: JUDGE_MODEL,
-      max_tokens: 1024,
+      max_tokens: 1300,
+      reasoning_effort: GROQ_REASONING_EFFORT,
       temperature: 0,
       response_format: { type: "json_object" },
       messages: [{ role: "user", content: prompt }],
@@ -247,7 +248,8 @@ async function evaluateQuestion(q: GoldQuestion, runId: string, groq: Groq): Pro
 
     const completion = await groq.chat.completions.create({
       model: GENERATION_MODEL,
-      max_tokens: 512,
+      max_tokens: 800,
+      reasoning_effort: GROQ_REASONING_EFFORT,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userTurn },

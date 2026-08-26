@@ -6,7 +6,7 @@ import { withMetrics, recordTokenUsage } from "@/lib/metrics";
 import { journalAgentRequestSchema, formatZodError } from "@/lib/validation";
 import { JOURNAL_TOOLS, dispatchTool } from "@/lib/journal-tools";
 import { logger } from "@/lib/logger";
-import { GROQ_GENERATION_MODEL } from "@/lib/models";
+import { GROQ_GENERATION_MODEL, GROQ_REASONING_EFFORT } from "@/lib/models";
 
 const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -60,7 +60,8 @@ export const POST = withMetrics("journal-agent", async (request: NextRequest) =>
     for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
       const completion = await groq.chat.completions.create({
         model: MODEL,
-        max_tokens: 600,
+        max_tokens: 850,
+        reasoning_effort: GROQ_REASONING_EFFORT,
         temperature: 0,
         messages,
         tools: JOURNAL_TOOLS,

@@ -8,6 +8,16 @@
   # NEXT_PUBLIC_* vars are meant to be inlined into the client bundle by Next.js --
   # that's not a leak, so tell Netlify's secret scanner to skip these two.
   SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_BACK4APP_APP_ID,NEXT_PUBLIC_BACK4APP_JS_KEY"
+  # Turbopack's persistent build cache (.next/cache/turbopack/**) serializes
+  # env vars it read during the build -- including GROQ_API_KEY -- into its
+  # own internal .sst cache files for incremental-build reuse. That cache
+  # directory is never part of what actually gets served (the deployed
+  # function bundle and static output don't include it), so a real secret
+  # showing up inside it is a scanner false positive, not an actual leak.
+  # Path is relative to the repo root, not `base` -- Netlify's own build log
+  # shows the cache under .netlify/.next/cache/..., which still matches this
+  # as a substring per Netlify's documented SECRETS_SCAN_OMIT_PATHS matching.
+  SECRETS_SCAN_OMIT_PATHS = ".next/cache"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
