@@ -2,7 +2,8 @@ import Groq from "groq-sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { retrieve } from "@/lib/retrieval";
 import { rewriteQuery } from "@/lib/query-rewrite";
-import { buildContext, buildSystemPrompt, type HealthProfile } from "@/lib/generation";
+import { buildContext, buildOperationalAddendum, type HealthProfile } from "@/lib/generation";
+import { buildChatSystemPrompt, buildContextBlock } from "@/lib/prompts/aura";
 import { screenRedFlags } from "@/lib/red-flag";
 import { detectCoinfectionSignals, COINFECTION_QUESTIONS } from "@/lib/co-infection";
 import { loadCorpusChunks } from "@/lib/corpus-lookup";
@@ -99,21 +100,27 @@ export async function POST(request: NextRequest) {
 
     const rewrittenQuery = await rewriteQuery(history, lastMessage.content, groq);
     const retrieved = await retrieve(rewrittenQuery, groq);
-    const { block, sources } = buildContext(retrieved);
+    const { sources, chunks } = buildContext(retrieved);
 
-    const systemPrompt = buildSystemPrompt(userProfile, block.length > 0);
-    const finalUserTurn = block
-      ? `RETRIEVED CONTEXT:\n${block}\n\nUSER MESSAGE: ${lastMessage.content}`
-      : lastMessage.content;
+    // Context goes in as its own system turn, and the user's message is sent
+    // completely raw — see lib/prompts/aura.ts's file header for why: appending
+    // "RETRIEVED CONTEXT:" to the user turn is what previously made the model
+    // say things like "the CDC materials you provided", since from its view the
+    // human handed it documents in that same turn. The `sources` list below is
+    // still shown to the user as its own UI element (ChatMessage.tsx) — this
+    // only stops the model from narrating its own retrieval mechanics in prose.
+    const contextBlock = buildContextBlock(chunks.map((c) => ({ text: c.text, source: c.metadata.source_name })));
 
     const stream = await groq.chat.completions.create({
       model: GROQ_GENERATION_MODEL,
       max_tokens: 1400,
       reasoning_effort: GROQ_REASONING_EFFORT,
       messages: [
-        { role: "system", content: systemPrompt },
+        { role: "system", content: buildChatSystemPrompt() },
+        { role: "system", content: buildOperationalAddendum(userProfile) },
+        { role: "system", content: contextBlock },
         ...history,
-        { role: "user", content: finalUserTurn },
+        { role: "user", content: lastMessage.content },
       ],
       stream: true,
     });

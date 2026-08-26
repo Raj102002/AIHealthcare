@@ -17,7 +17,8 @@ import { screenRedFlags } from "@/lib/red-flag";
 import { rewriteQuery } from "@/lib/query-rewrite";
 import { fuseCandidates } from "@/lib/retrieval";
 import { rerank } from "@/lib/rerank";
-import { buildContext, buildSystemPrompt } from "@/lib/generation";
+import { buildContext, buildOperationalAddendum } from "@/lib/generation";
+import { buildChatSystemPrompt, buildContextBlock } from "@/lib/prompts/aura";
 import { fleschKincaidGrade } from "@/lib/readability";
 import { GROQ_GENERATION_MODEL, GROQ_REASONING_EFFORT } from "@/lib/models";
 
@@ -242,17 +243,23 @@ async function evaluateQuestion(q: GoldQuestion, runId: string, groq: Groq): Pro
     const recall20 = q.gold_chunks.length > 0 ? q.gold_chunks.some((id) => retrievedIds20.includes(id)) : null;
     const recall5 = q.gold_chunks.length > 0 ? q.gold_chunks.some((id) => retrievedIds5.includes(id)) : null;
 
-    const { block, sources } = buildContext(final);
-    const systemPrompt = buildSystemPrompt(undefined, block.length > 0);
-    const userTurn = block ? `RETRIEVED CONTEXT:\n${block}\n\nUSER MESSAGE: ${q.question}` : q.question;
+    const { block, sources, chunks } = buildContext(final);
+    // Same three-system-turn shape as /api/chat/route.ts, so this eval measures
+    // what's actually deployed, not a stand-in pipeline. `block` (the numbered
+    // string) is kept only for the judge() call below, which just needs the raw
+    // reference text to check groundedness against -- it was never sent to the
+    // model this way.
+    const contextBlock = buildContextBlock(chunks.map((c) => ({ text: c.text, source: c.metadata.source_name })));
 
     const completion = await groq.chat.completions.create({
       model: GENERATION_MODEL,
       max_tokens: 800,
       reasoning_effort: GROQ_REASONING_EFFORT,
       messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userTurn },
+        { role: "system", content: buildChatSystemPrompt() },
+        { role: "system", content: buildOperationalAddendum(undefined) },
+        { role: "system", content: contextBlock },
+        { role: "user", content: q.question },
       ],
     });
     const answer = completion.choices[0]?.message?.content ?? "";
