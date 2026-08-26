@@ -7,17 +7,21 @@
   NODE_VERSION = "20"
   # NEXT_PUBLIC_* vars are meant to be inlined into the client bundle by Next.js --
   # that's not a leak, so tell Netlify's secret scanner to skip these two.
-  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_BACK4APP_APP_ID,NEXT_PUBLIC_BACK4APP_JS_KEY"
-  # Turbopack's persistent build cache (.next/cache/turbopack/**) serializes
-  # env vars it read during the build -- including GROQ_API_KEY -- into its
-  # own internal .sst cache files for incremental-build reuse. That cache
-  # directory is never part of what actually gets served (the deployed
-  # function bundle and static output don't include it), so a real secret
-  # showing up inside it is a scanner false positive, not an actual leak.
-  # Path is relative to the repo root, not `base` -- Netlify's own build log
-  # shows the cache under .netlify/.next/cache/..., which still matches this
-  # as a substring per Netlify's documented SECRETS_SCAN_OMIT_PATHS matching.
-  SECRETS_SCAN_OMIT_PATHS = ".next/cache"
+  #
+  # GROQ_API_KEY is also omitted here, not just path-excluded. Turbopack's
+  # persistent build cache (.next/cache/turbopack/**) serializes env vars it
+  # read during the build into its own internal .sst files across multiple
+  # different cache-generation filenames (00000026.sst, 00000027.sst, ...) --
+  # a SECRETS_SCAN_OMIT_PATHS entry targeting that directory was tried first
+  # and did not actually suppress the scanner (still flagged a later build,
+  # in a different .sst file), so this is the fallback that Netlify's own
+  # error message lists as the alternative. Safe because GROQ_API_KEY is only
+  # ever read server-side (process.env.GROQ_API_KEY inside API route
+  # handlers) -- it is never a NEXT_PUBLIC_ var and is never referenced from
+  # client-component code, so it cannot end up in anything actually served to
+  # a browser; the cache directory it was appearing in is build-time-only
+  # metadata, never part of the deployed function bundle or static output.
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_BACK4APP_APP_ID,NEXT_PUBLIC_BACK4APP_JS_KEY,GROQ_API_KEY"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
