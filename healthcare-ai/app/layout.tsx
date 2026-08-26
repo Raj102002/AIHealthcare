@@ -6,9 +6,9 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "HealthAI Assistant",
+  title: "ClearSignal — Lyme Disease Diagnostic Support",
   description:
-    "AI-powered healthcare assistant — general wellness information and symptom guidance. Not a substitute for professional medical care.",
+    "AI-assisted diagnostic support for Lyme disease — RAG-grounded guidance, symptom/exposure journaling, and clinician handoff generation. Not a substitute for professional medical care.",
 };
 
 export default function RootLayout({

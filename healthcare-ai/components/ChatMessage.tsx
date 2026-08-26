@@ -22,11 +22,11 @@ export default function ChatMessage({ message, onSpeak }: Props) {
 
   return (
     <div
-      className={`flex gap-3 ${isUser ? "flex-row-reverse" : "flex-row"} mb-4`}
+      className={`flex gap-3 ${isUser ? "flex-row-reverse" : "flex-row"} mb-4 animate-message-in`}
     >
       <div
-        className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-          isUser ? "bg-teal-600" : "bg-slate-200"
+        className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
+          isUser ? "bg-gradient-to-br from-teal-500 to-teal-700" : "bg-gradient-to-br from-slate-100 to-slate-200"
         }`}
       >
         {isUser ? (
@@ -47,7 +47,7 @@ export default function ChatMessage({ message, onSpeak }: Props) {
         <div
           className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
             isUser
-              ? "bg-teal-600 text-white rounded-tr-sm"
+              ? "bg-gradient-to-br from-teal-500 to-teal-700 text-white rounded-tr-sm shadow-sm shadow-teal-600/20"
               : message.isEmergency
               ? "bg-red-50 text-slate-800 border border-red-200 rounded-tl-sm"
               : "bg-white text-slate-800 border border-slate-100 shadow-sm rounded-tl-sm"

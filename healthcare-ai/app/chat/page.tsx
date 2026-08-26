@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Send,
-  Heart,
   LayoutDashboard,
   LogOut,
   Loader2,
@@ -29,7 +28,7 @@ import ChatMessage from "@/components/ChatMessage";
 import HealthLogForm from "@/components/HealthLogForm";
 import UserProfilePanel from "@/components/UserProfilePanel";
 import MicButton from "@/components/MicButton";
-import VoiceOrb from "@/components/VoiceOrb";
+import TalkingAvatar, { type AvatarState } from "@/components/TalkingAvatar";
 import VoiceDisclosure from "@/components/VoiceDisclosure";
 import LowStimToggle from "@/components/LowStimToggle";
 import { useSpeechOutput } from "@/hooks/useSpeechOutput";
@@ -67,7 +66,7 @@ export default function ChatPage() {
   const disclosureSeenRef = useRef(true);
   const wasSpeakingRef = useRef(false);
 
-  const { isSpeaking, beginStream, enqueueSentence, speak, stop: stopSpeaking, unlock } = useSpeechOutput();
+  const { isSpeaking, level: speechLevel, beginStream, enqueueSentence, speak, stop: stopSpeaking, unlock } = useSpeechOutput();
 
   const handleVoiceTranscript = useCallback((text: string) => {
     voiceTriggeredRef.current = true;
@@ -186,7 +185,18 @@ export default function ChatPage() {
       });
 
       if (!res.ok) {
-        throw new Error(`API error: ${res.status}`);
+        // Surface the server's actual reason (rate limit, validation, upstream
+        // AI-provider failure, etc.) instead of masking every failure behind
+        // one generic message — the prior version of this screen made every
+        // production error indistinguishable from every other one.
+        let serverMessage = "";
+        try {
+          const body = await res.clone().json();
+          serverMessage = typeof body?.error === "string" ? body.error : "";
+        } catch {
+          // Non-JSON error body (e.g. a platform-level 502/504) — fall through to the status code.
+        }
+        throw new Error(serverMessage || `Request failed (HTTP ${res.status}). Please try again.`);
       }
 
       const sourcesHeader = res.headers.get("X-RAG-Sources");
@@ -255,13 +265,13 @@ export default function ChatPage() {
       }
     } catch (err: unknown) {
       if ((err as Error).name !== "AbortError") {
+        const detail = err instanceof Error && err.message ? err.message : "Please try again.";
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
               ? {
                   ...m,
-                  content:
-                    "Sorry, I encountered an error. Please try again. If this is an emergency, call 911 immediately.",
+                  content: `Sorry, I couldn't get a response: ${detail} If this is an emergency, call 911 immediately.`,
                 }
               : m
           )
@@ -286,6 +296,18 @@ export default function ChatPage() {
   const handleBargeIn = useCallback(() => {
     stopSpeaking();
   }, [stopSpeaking]);
+
+  // Turning hands-free mode off only stopped *future* auto-restarts
+  // (conversationModeRef gates the effect above) — it didn't stop a recording
+  // already in progress, so the mic could keep listening after the user
+  // clearly signaled they were done. Stop it immediately here instead.
+  const handleToggleConversationMode = useCallback(() => {
+    setConversationMode((prev) => {
+      const next = !prev;
+      if (!next) stopVoice();
+      return next;
+    });
+  }, [stopVoice]);
 
   async function handleSaveConversation() {
     try {
@@ -334,8 +356,17 @@ export default function ChatPage() {
     ? "Thinking"
     : "";
 
+  const avatarState: AvatarState = isSpeaking
+    ? "speaking"
+    : voiceState === "listening"
+    ? "listening"
+    : voiceState === "transcribing" || streaming
+    ? "thinking"
+    : "idle";
+  const avatarLevel = isSpeaking ? speechLevel : voiceState === "listening" ? voiceLevel : 0;
+
   return (
-    <div className="h-screen flex flex-col bg-slate-50">
+    <div className="h-screen flex flex-col bg-gradient-to-b from-teal-50/40 via-slate-50 to-slate-50">
       <div className="sr-only" role="status" aria-live="polite">
         {voiceStatus}
       </div>
@@ -348,32 +379,33 @@ export default function ChatPage() {
       )}
 
       {/* Top nav */}
-      <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center">
-            <Heart className="w-4 h-4 text-white" fill="white" />
+      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200/70 px-4 py-2.5 flex items-center justify-between shrink-0 shadow-sm shadow-slate-200/50 z-10">
+        <div className="flex items-center gap-2.5">
+          <TalkingAvatar state={avatarState} level={avatarLevel} size={38} />
+          <div className="leading-tight">
+            <span className="font-semibold text-slate-900 tracking-tight">ClearSignal</span>
+            <p className="text-[11px] text-slate-400 -mt-0.5">Lyme diagnostic support</p>
           </div>
-          <span className="font-semibold text-slate-900">HealthAI</span>
         </div>
 
         <div className="flex items-center gap-1">
           <Link
             href="/journal"
-            className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-teal-600 px-3 py-1.5 rounded-lg hover:bg-teal-50 transition-colors"
+            className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-teal-700 px-3 py-1.5 rounded-lg hover:bg-teal-50 transition-colors"
           >
             <NotebookPen className="w-4 h-4" />
             <span className="hidden sm:inline">Journal</span>
           </Link>
           <Link
             href="/test-context"
-            className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-teal-600 px-3 py-1.5 rounded-lg hover:bg-teal-50 transition-colors"
+            className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-teal-700 px-3 py-1.5 rounded-lg hover:bg-teal-50 transition-colors"
           >
             <TestTube2 className="w-4 h-4" />
             <span className="hidden sm:inline">Test Timing</span>
           </Link>
           <Link
             href="/dashboard"
-            className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-teal-600 px-3 py-1.5 rounded-lg hover:bg-teal-50 transition-colors"
+            className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-teal-700 px-3 py-1.5 rounded-lg hover:bg-teal-50 transition-colors"
           >
             <LayoutDashboard className="w-4 h-4" />
             <span className="hidden sm:inline">Dashboard</span>
@@ -392,7 +424,7 @@ export default function ChatPage() {
       {/* Main layout */}
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <aside className="hidden lg:flex flex-col w-72 border-r border-slate-200 bg-white overflow-y-auto scrollbar-thin p-4 gap-4 shrink-0">
+        <aside className="hidden lg:flex flex-col w-72 border-r border-slate-200/70 bg-white/70 backdrop-blur-sm overflow-y-auto scrollbar-thin p-4 gap-4 shrink-0">
           <div>
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
               Signed in as
@@ -442,10 +474,8 @@ export default function ChatPage() {
                 />
               ))}
               {streaming && messages[messages.length - 1]?.content === "" && (
-                <div className="flex gap-3 mb-4">
-                  <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center">
-                    <Loader2 className="w-4 h-4 text-slate-500 animate-spin" />
-                  </div>
+                <div className="flex gap-3 mb-4 items-center">
+                  <TalkingAvatar state="thinking" size={32} />
                   <div className="bg-white border border-slate-100 shadow-sm rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-slate-400">
                     Thinking...
                   </div>
@@ -456,9 +486,14 @@ export default function ChatPage() {
           </div>
 
           {/* Disclaimer bar */}
-          <div className="bg-amber-50 border-t border-amber-100 px-4 py-1.5 flex items-center justify-center gap-3 text-center text-xs text-amber-700">
+          <div className="bg-amber-50/80 border-t border-amber-100 px-4 py-1.5 flex items-center justify-center gap-3 text-center text-xs text-amber-700">
             <span>⚕️ This AI provides general information only — not a substitute for professional medical advice.</span>
-            <VoiceOrb active={isSpeaking} label={voiceStatus || "Speaking..."} />
+            {voiceStatus && (
+              <span className="flex items-center gap-1.5 text-teal-700 font-medium shrink-0">
+                <TalkingAvatar state={avatarState} level={avatarLevel} size={18} />
+                {voiceStatus}
+              </span>
+            )}
           </div>
 
           {voiceError && (
@@ -468,9 +503,10 @@ export default function ChatPage() {
           )}
 
           {/* Input area */}
-          <div className="bg-white border-t border-slate-200 px-4 py-3">
+          <div className="bg-white/90 backdrop-blur-sm border-t border-slate-200/70 px-4 py-3">
             <div className="max-w-2xl mx-auto">
               <div className="flex gap-2 items-end">
+                <TalkingAvatar state={avatarState} level={avatarLevel} size={44} className="mb-0.5" />
                 <textarea
                   ref={inputRef}
                   value={input}
@@ -489,7 +525,7 @@ export default function ChatPage() {
                 <div className="flex gap-1.5 shrink-0">
                   <button
                     type="button"
-                    onClick={() => setConversationMode((v) => !v)}
+                    onClick={handleToggleConversationMode}
                     disabled={streaming}
                     title={conversationMode ? "Turn off hands-free conversation mode" : "Turn on hands-free conversation mode"}
                     aria-label="Toggle hands-free conversation mode"
@@ -523,7 +559,7 @@ export default function ChatPage() {
                   <button
                     onClick={() => sendMessage()}
                     disabled={!input.trim() || streaming}
-                    className="p-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:bg-teal-200 text-white transition-colors"
+                    className="p-2.5 rounded-xl bg-gradient-to-br from-teal-500 to-teal-700 hover:from-teal-600 hover:to-teal-800 disabled:from-teal-200 disabled:to-teal-200 text-white shadow-sm shadow-teal-600/20 transition-all hover:scale-105 disabled:hover:scale-100 disabled:shadow-none"
                     title="Send"
                   >
                     <Send className="w-4 h-4" />
