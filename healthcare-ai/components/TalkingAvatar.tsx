@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export type AvatarState = "idle" | "listening" | "thinking" | "speaking";
 
@@ -30,7 +30,11 @@ interface Props {
 export default function TalkingAvatar({ state, level = 0, size = 72, className = "" }: Props) {
   const [blinking, setBlinking] = useState(false);
   const [synthTick, setSynthTick] = useState(0);
-  const [gesture, setGesture] = useState({ turn: 0, tilt: 0, brow: 0 });
+  const [gesture, setGesture] = useState({ turn: 0, tilt: 0, bob: 0, brow: 0 });
+  const levelRef = useRef(level);
+  useEffect(() => {
+    levelRef.current = level;
+  }, [level]);
 
   // Occasional idle blink — purely cosmetic, so a random interval is fine.
   useEffect(() => {
@@ -67,20 +71,29 @@ export default function TalkingAvatar({ state, level = 0, size = 72, className =
     return () => cancelAnimationFrame(raf);
   }, [state, level]);
 
-  // Head turn/tilt/brow-raise while speaking — deliberately on its own,
-  // slower cadence than the mouth, and independent of amplitude, so the
-  // character reads as gesturing through an explanation rather than just a
-  // mouth animating on an otherwise frozen head.
+  // Head turn/tilt/bob/brow-raise while speaking. Reads `levelRef` (live TTS
+  // amplitude) every frame rather than depending on `level` directly, so the
+  // animation loop's own phase (`t`) never resets mid-sentence — only its
+  // speed and size respond to how animated the speech currently is. Louder/
+  // more dynamic speech visibly speeds up and enlarges the motion; quieter
+  // stretches settle back down. This is deliberately not 1:1 lip-sync-style
+  // amplitude mapping (that's the mouth's job) — it's a coarser "how
+  // animatedly is this person talking right now" signal driving the head and
+  // brows, so the character reads as gesturing through an explanation.
   useEffect(() => {
     if (state !== "speaking") return;
     let raf: number;
     const start = performance.now();
     const tick = (now: number) => {
       const t = (now - start) / 1000;
+      const lvl = levelRef.current;
+      const speed = 1 + lvl * 2.4;
+      const amp = 1 + lvl * 2;
       setGesture({
-        turn: Math.sin(t * 0.7) * 3.2,
-        tilt: Math.sin(t * 0.5 + 1) * 2.2,
-        brow: Math.max(0, Math.sin(t * 1.3)) * (Math.sin(t * 0.35) > 0.6 ? 1 : 0),
+        turn: Math.sin(t * 1.15 * speed) * 4.5 * amp,
+        tilt: Math.sin(t * 0.85 * speed + 1) * 3.4 * amp,
+        bob: Math.abs(Math.sin(t * 2.3 * speed)) * 2.2 * amp,
+        brow: Math.max(0, Math.sin(t * 1.6 * speed)),
       });
       raf = requestAnimationFrame(tick);
     };
@@ -88,10 +101,10 @@ export default function TalkingAvatar({ state, level = 0, size = 72, className =
     return () => cancelAnimationFrame(raf);
   }, [state]);
 
-  const activeGesture = state === "speaking" ? gesture : { turn: 0, tilt: 0, brow: 0 };
+  const activeGesture = state === "speaking" ? gesture : { turn: 0, tilt: 0, bob: 0, brow: 0 };
   const mouthOpen = state === "speaking" ? Math.max(level, level > 0.04 ? level : synthTick * 0.7) : 0;
   const eyeScaleY = blinking ? 0.08 : state === "listening" ? 1.1 : 1;
-  const browLift = (state === "listening" ? -1.2 : 0) - activeGesture.brow * 1.4;
+  const browLift = (state === "listening" ? -1.2 : 0) - activeGesture.brow * 1.8;
   const ringScale = 1 + (state === "listening" || state === "speaking" ? level * 0.5 : 0);
 
   const ringColor =
@@ -162,8 +175,8 @@ export default function TalkingAvatar({ state, level = 0, size = 72, className =
           <g
             style={{
               transformOrigin: "50px 58px",
-              transform: `rotate(${activeGesture.tilt}deg) translateX(${activeGesture.turn}px)`,
-              transition: "transform 120ms ease-out",
+              transform: `rotate(${activeGesture.tilt}deg) translate(${activeGesture.turn}px, ${-activeGesture.bob}px)`,
+              transition: "transform 80ms ease-out",
             }}
           >
             <rect x="43" y="55" width="14" height="16" rx="6" fill={`url(#${uid}-skin)`} />

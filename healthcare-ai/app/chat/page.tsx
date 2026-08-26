@@ -13,6 +13,7 @@ import {
   Headphones,
   TestTube2,
   NotebookPen,
+  Square,
 } from "lucide-react";
 import {
   getCurrentUser,
@@ -527,6 +528,16 @@ export default function ChatPage() {
                 <TalkingAvatar state={avatarState} level={avatarLevel} size={18} />
                 {voiceStatus}
               </span>
+            )}
+            {isSpeaking && (
+              <button
+                type="button"
+                onClick={stopSpeaking}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-100 hover:bg-red-200 text-red-700 font-semibold shrink-0 transition-colors"
+              >
+                <Square className="w-3 h-3" fill="currentColor" />
+                Stop
+              </button>
             )}
           </div>
 

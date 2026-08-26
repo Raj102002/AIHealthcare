@@ -60,7 +60,7 @@ export default function MicButton({ state, level, isSpeaking, disabled, onStart,
       <span className="relative block">
         {state === "transcribing" ? (
           <Loader2 className="w-4 h-4 animate-spin" />
-        ) : state === "listening" ? (
+        ) : isSpeaking || state === "listening" ? (
           <Square className="w-4 h-4" fill="currentColor" />
         ) : (
           <Mic className="w-4 h-4" />
