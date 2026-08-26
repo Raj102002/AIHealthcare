@@ -13,21 +13,24 @@ interface Props {
 }
 
 /**
- * Original character, not a reproduction of any existing product's avatar —
- * a rounded, glossy "3D sticker" face built from layered SVG gradients and
- * highlights (fake specular light, fake ambient-occlusion shading, a soft
- * drop shadow) rather than a flat icon, so it reads as a dimensional
- * character instead of a UI glyph. Built entirely from inline SVG in the
- * app's own teal/navy palette so it never needs a network image asset.
+ * Original illustrated character (not a photo, not a reproduction of any
+ * real person or existing product's avatar) — a simple human bust: face,
+ * hair, shoulders/collar, cropped into a circle like a portrait photo. Built
+ * entirely from inline SVG in the app's own palette so it never needs a
+ * network image asset, and never raises the likeness/licensing problems a
+ * real photo or a generated photoreal face would.
  *
  * Mouth openness follows `level` when we have real amplitude data (Groq TTS
  * playback, or mic input while listening); when we don't (browser
  * SpeechSynthesis fallback has no readable audio buffer) it falls back to a
- * synthetic talk cadence so the avatar still looks alive rather than frozen.
+ * synthetic talk cadence. While speaking, the head also turns/tilts gently
+ * on its own cadence — independent of amplitude — so it reads as a person
+ * animatedly explaining something, not just a mouth flapping in place.
  */
 export default function TalkingAvatar({ state, level = 0, size = 72, className = "" }: Props) {
   const [blinking, setBlinking] = useState(false);
   const [synthTick, setSynthTick] = useState(0);
+  const [gesture, setGesture] = useState({ turn: 0, tilt: 0, brow: 0 });
 
   // Occasional idle blink — purely cosmetic, so a random interval is fine.
   useEffect(() => {
@@ -64,15 +67,37 @@ export default function TalkingAvatar({ state, level = 0, size = 72, className =
     return () => cancelAnimationFrame(raf);
   }, [state, level]);
 
+  // Head turn/tilt/brow-raise while speaking — deliberately on its own,
+  // slower cadence than the mouth, and independent of amplitude, so the
+  // character reads as gesturing through an explanation rather than just a
+  // mouth animating on an otherwise frozen head.
+  useEffect(() => {
+    if (state !== "speaking") return;
+    let raf: number;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const t = (now - start) / 1000;
+      setGesture({
+        turn: Math.sin(t * 0.7) * 3.2,
+        tilt: Math.sin(t * 0.5 + 1) * 2.2,
+        brow: Math.max(0, Math.sin(t * 1.3)) * (Math.sin(t * 0.35) > 0.6 ? 1 : 0),
+      });
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [state]);
+
+  const activeGesture = state === "speaking" ? gesture : { turn: 0, tilt: 0, brow: 0 };
   const mouthOpen = state === "speaking" ? Math.max(level, level > 0.04 ? level : synthTick * 0.7) : 0;
-  const eyeScaleY = blinking ? 0.08 : state === "listening" ? 1.12 : 1;
-  const browLift = state === "listening" ? -1.5 : state === "thinking" ? -0.5 : 0;
+  const eyeScaleY = blinking ? 0.08 : state === "listening" ? 1.1 : 1;
+  const browLift = (state === "listening" ? -1.2 : 0) - activeGesture.brow * 1.4;
   const ringScale = 1 + (state === "listening" || state === "speaking" ? level * 0.5 : 0);
 
   const ringColor =
     state === "listening" ? "#2DB49E" : state === "speaking" ? "#5EEAD4" : state === "thinking" ? "#E8A83C" : "transparent";
 
-  const uid = "ta"; // gradient ids scoped per-instance is unnecessary here (single avatar on screen at a time per size)
+  const uid = "av";
 
   return (
     <div
@@ -89,13 +114,13 @@ export default function TalkingAvatar({ state, level = 0, size = 72, className =
           : "Aura"
       }
     >
-      {/* Pulse ring — reacts to level while listening/speaking, breathes gently while idle */}
+      {/* Reactive ring — level while listening/speaking, gentle breathing while idle */}
       <span
         aria-hidden="true"
         className={`absolute inset-0 rounded-full ${state === "idle" ? "animate-pulse" : ""}`}
         style={{
           background: ringColor,
-          opacity: state === "idle" ? 0.12 : 0.28,
+          opacity: state === "idle" ? 0.12 : 0.3,
           transform: `scale(${ringScale})`,
           transition: "transform 90ms linear",
         }}
@@ -103,92 +128,122 @@ export default function TalkingAvatar({ state, level = 0, size = 72, className =
 
       <svg viewBox="0 0 100 100" width={size} height={size} className="relative overflow-visible">
         <defs>
-          {/* Base sphere shading: light top-left, deep shadow bottom-right */}
-          <radialGradient id={`${uid}-face`} cx="34%" cy="28%" r="85%">
-            <stop offset="0%" stopColor="#3FD8BE" />
-            <stop offset="45%" stopColor="#1FA08C" />
-            <stop offset="80%" stopColor="#0F5B50" />
-            <stop offset="100%" stopColor="#0B1F3A" />
+          <clipPath id={`${uid}-crop`}>
+            <circle cx="50" cy="50" r="46" />
+          </clipPath>
+          <radialGradient id={`${uid}-backdrop`} cx="50%" cy="35%" r="75%">
+            <stop offset="0%" stopColor="#EAF7F4" />
+            <stop offset="100%" stopColor="#BFE6DE" />
           </radialGradient>
-          {/* Glossy specular highlight, like light bouncing off a rounded plastic/glass surface */}
-          <radialGradient id={`${uid}-shine`} cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.55" />
-            <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
-          </radialGradient>
-          {/* Soft floor shadow */}
-          <radialGradient id={`${uid}-shadow`} cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#000000" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="#000000" stopOpacity="0" />
-          </radialGradient>
-          <radialGradient id={`${uid}-mouth`} cx="50%" cy="30%" r="80%">
-            <stop offset="0%" stopColor="#2A0F14" />
-            <stop offset="100%" stopColor="#0B1F3A" />
-          </radialGradient>
+          <linearGradient id={`${uid}-skin`} x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#F3BE97" />
+            <stop offset="100%" stopColor="#E0A277" />
+          </linearGradient>
+          <linearGradient id={`${uid}-hair`} x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#233A5C" />
+            <stop offset="100%" stopColor="#132540" />
+          </linearGradient>
+          <linearGradient id={`${uid}-collar`} x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#2FC7AE" />
+            <stop offset="100%" stopColor="#178E7A" />
+          </linearGradient>
         </defs>
 
-        {/* Floor shadow */}
-        <ellipse cx="50" cy="92" rx="28" ry="6" fill={`url(#${uid}-shadow)`} />
+        <circle cx="50" cy="50" r="47" fill="#0B1F3A" opacity="0.06" />
 
-        {/* Head sphere */}
-        <circle cx="50" cy="48" r="44" fill={`url(#${uid}-face)`} />
-        {/* Bottom rim shading for extra roundness */}
-        <path d="M8,55 A44,44 0 0 0 92,55 A44,50 0 0 1 8,55 Z" fill="#0B1F3A" opacity="0.22" />
-        {/* Glossy highlight */}
-        <ellipse cx="34" cy="26" rx="22" ry="16" fill={`url(#${uid}-shine)`} />
+        <g clipPath={`url(#${uid}-crop)`}>
+          <rect x="0" y="0" width="100" height="100" fill={`url(#${uid}-backdrop)`} />
 
-        {/* Cheeks */}
-        <ellipse cx="24" cy="58" rx="7.5" ry="5.5" fill="#F5A9A9" opacity="0.4" />
-        <ellipse cx="76" cy="58" rx="7.5" ry="5.5" fill="#F5A9A9" opacity="0.4" />
+          {/* Shoulders / collar — reads as "portrait from the chest up" */}
+          <path d="M6,100 C6,78 24,68 50,68 C76,68 94,78 94,100 Z" fill={`url(#${uid}-collar)`} />
+          <path d="M38,100 L38,74 Q50,80 62,74 L62,100 Z" fill="white" opacity="0.85" />
 
-        {/* Eyebrows */}
-        <g stroke="#0B1F3A" strokeWidth="2.6" strokeLinecap="round" opacity="0.55">
-          <path d={`M31,${34 + browLift} q6,-3 12,0`} fill="none" />
-          <path d={`M57,${34 + browLift} q6,-3 12,0`} fill="none" />
-        </g>
+          {/* Head + neck group — this is what turns/tilts while speaking */}
+          <g
+            style={{
+              transformOrigin: "50px 58px",
+              transform: `rotate(${activeGesture.tilt}deg) translateX(${activeGesture.turn}px)`,
+              transition: "transform 120ms ease-out",
+            }}
+          >
+            <rect x="43" y="55" width="14" height="16" rx="6" fill={`url(#${uid}-skin)`} />
 
-        {/* Eyes — bigger, rounder, with a catchlight for a glossy "3D toy" look */}
-        <g style={{ transformOrigin: "38px 46px", transition: "transform 90ms ease" }}>
-          <ellipse cx="38" cy="46" rx="7" ry={8.5 * eyeScaleY} fill="white" />
-          <circle cx="38" cy={46 + (1 - eyeScaleY) * 2.5} r="3.4" fill="#0B1F3A" />
-          <circle cx="36.2" cy={44.2 + (1 - eyeScaleY) * 2.5} r="1.1" fill="white" opacity="0.9" />
-        </g>
-        <g style={{ transformOrigin: "62px 46px", transition: "transform 90ms ease" }}>
-          <ellipse cx="62" cy="46" rx="7" ry={8.5 * eyeScaleY} fill="white" />
-          <circle cx="62" cy={46 + (1 - eyeScaleY) * 2.5} r="3.4" fill="#0B1F3A" />
-          <circle cx="60.2" cy={44.2 + (1 - eyeScaleY) * 2.5} r="1.1" fill="white" opacity="0.9" />
-        </g>
+            {/* Hair — back layer, behind head */}
+            <path d="M20,48 C20,24 34,12 50,12 C66,12 80,24 80,48 L80,58 C74,44 64,38 50,38 C36,38 26,44 20,58 Z" fill={`url(#${uid}-hair)`} />
 
-        {/* Thinking: small drifting dots instead of a mouth */}
-        {state === "thinking" ? (
-          <g fill="white" opacity="0.9">
-            <circle cx="42" cy="68" r="2.6">
-              <animate attributeName="cy" values="68;64;68" dur="1s" repeatCount="indefinite" begin="0s" />
-            </circle>
-            <circle cx="50" cy="68" r="2.6">
-              <animate attributeName="cy" values="68;64;68" dur="1s" repeatCount="indefinite" begin="0.15s" />
-            </circle>
-            <circle cx="58" cy="68" r="2.6">
-              <animate attributeName="cy" values="68;64;68" dur="1s" repeatCount="indefinite" begin="0.3s" />
-            </circle>
-          </g>
-        ) : (
-          <g style={{ transition: "transform 60ms linear" }}>
-            {/* Outer lip shape */}
-            <rect
-              x="38"
-              y={66 - (2.5 + mouthOpen * 9)}
-              width="24"
-              height={(2.5 + mouthOpen * 9) * 2}
-              rx={(2.5 + mouthOpen * 9)}
-              fill={`url(#${uid}-mouth)`}
-              opacity="0.9"
+            {/* Head */}
+            <ellipse cx="50" cy="42" rx="21" ry="23" fill={`url(#${uid}-skin)`} />
+
+            {/* Ears */}
+            <ellipse cx="29.5" cy="43" rx="2.6" ry="4" fill={`url(#${uid}-skin)`} />
+            <ellipse cx="70.5" cy="43" rx="2.6" ry="4" fill={`url(#${uid}-skin)`} />
+
+            {/* Hair — front layer / fringe */}
+            <path
+              d="M22,38 C22,20 34,10 50,10 C66,10 78,20 78,38 C78,32 70,24 50,24 C30,24 22,32 22,38 Z"
+              fill={`url(#${uid}-hair)`}
             />
-            {/* Inner highlight sliver when open, for a soft rounded-3D lip edge */}
-            {mouthOpen > 0.15 && (
-              <ellipse cx="50" cy={66 - (2.5 + mouthOpen * 9) * 0.55} rx="9" ry="1.4" fill="#F2A6A6" opacity="0.35" />
+
+            {/* Cheeks */}
+            <ellipse cx="33" cy="49" rx="4.5" ry="3" fill="#F2A6A6" opacity="0.4" />
+            <ellipse cx="67" cy="49" rx="4.5" ry="3" fill="#F2A6A6" opacity="0.4" />
+
+            {/* Eyebrows */}
+            <g stroke="#3A2718" strokeWidth="1.8" strokeLinecap="round" fill="none" opacity="0.75">
+              <path d={`M39,${33 + browLift} q5,-2.5 10,0`} />
+              <path d={`M51,${33 + browLift} q5,-2.5 10,0`} />
+            </g>
+
+            {/* Eyes */}
+            <g style={{ transformOrigin: "43.5px 40px", transition: "transform 90ms ease" }}>
+              <ellipse cx="43.5" cy="40" rx="4.6" ry={5.2 * eyeScaleY} fill="white" />
+              <circle cx="43.5" cy={40 + (1 - eyeScaleY) * 1.6} r="2.5" fill="#5A3A22" />
+              <circle cx="43.5" cy={40 + (1 - eyeScaleY) * 1.6} r="1.15" fill="#1A1006" />
+              <circle cx="42.6" cy={38.6 + (1 - eyeScaleY) * 1.6} r="0.7" fill="white" opacity="0.95" />
+            </g>
+            <g style={{ transformOrigin: "56.5px 40px", transition: "transform 90ms ease" }}>
+              <ellipse cx="56.5" cy="40" rx="4.6" ry={5.2 * eyeScaleY} fill="white" />
+              <circle cx="56.5" cy={40 + (1 - eyeScaleY) * 1.6} r="2.5" fill="#5A3A22" />
+              <circle cx="56.5" cy={40 + (1 - eyeScaleY) * 1.6} r="1.15" fill="#1A1006" />
+              <circle cx="55.6" cy={38.6 + (1 - eyeScaleY) * 1.6} r="0.7" fill="white" opacity="0.95" />
+            </g>
+
+            {/* Nose hint */}
+            <path d="M49,42 Q48,47 50,48.5 Q52,47.5 51,42" stroke="#C98A5C" strokeWidth="1" fill="none" opacity="0.6" strokeLinecap="round" />
+
+            {/* Thinking: small drifting dots instead of a mouth */}
+            {state === "thinking" ? (
+              <g fill="#3A2718" opacity="0.75">
+                <circle cx="46" cy="56" r="1.5">
+                  <animate attributeName="cy" values="56;53;56" dur="1s" repeatCount="indefinite" begin="0s" />
+                </circle>
+                <circle cx="50" cy="56" r="1.5">
+                  <animate attributeName="cy" values="56;53;56" dur="1s" repeatCount="indefinite" begin="0.15s" />
+                </circle>
+                <circle cx="54" cy="56" r="1.5">
+                  <animate attributeName="cy" values="56;53;56" dur="1s" repeatCount="indefinite" begin="0.3s" />
+                </circle>
+              </g>
+            ) : (
+              <g style={{ transition: "transform 60ms linear" }}>
+                {/* Lip shape */}
+                <rect
+                  x="43.5"
+                  y={55.5 - (1.4 + mouthOpen * 5.5)}
+                  width="13"
+                  height={(1.4 + mouthOpen * 5.5) * 2}
+                  rx={1.4 + mouthOpen * 5.5}
+                  fill="#B3583F"
+                  opacity="0.85"
+                />
+                {/* Teeth suggestion when the mouth is open enough */}
+                {mouthOpen > 0.22 && (
+                  <rect x="45" y={55.5 - (1.4 + mouthOpen * 5.5) + 0.8} width="10" height="1.6" rx="0.8" fill="white" opacity="0.85" />
+                )}
+              </g>
             )}
           </g>
-        )}
+        </g>
       </svg>
     </div>
   );

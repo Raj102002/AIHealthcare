@@ -371,6 +371,13 @@ export default function ChatPage() {
         {voiceStatus}
       </div>
 
+      {/* Decorative background depth — pure CSS, no assets, purely cosmetic */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden -z-10" aria-hidden="true">
+        <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-teal-200/30 blur-3xl" />
+        <div className="absolute top-1/3 -right-32 w-96 h-96 rounded-full bg-cyan-200/25 blur-3xl" />
+        <div className="absolute -bottom-32 left-1/4 w-96 h-96 rounded-full bg-teal-100/40 blur-3xl" />
+      </div>
+
       {showEmergency && (
         <EmergencyBanner onDismiss={() => setShowEmergency(false)} />
       )}
@@ -381,7 +388,7 @@ export default function ChatPage() {
       {/* Top nav */}
       <header className="bg-white/80 backdrop-blur-md border-b border-slate-200/70 px-4 py-2.5 flex items-center justify-between shrink-0 shadow-sm shadow-slate-200/50 z-10">
         <div className="flex items-center gap-2.5">
-          <TalkingAvatar state={avatarState} level={avatarLevel} size={38} />
+          <TalkingAvatar state={avatarState} level={avatarLevel} size={42} />
           <div className="leading-tight">
             <span className="font-semibold text-slate-900 tracking-tight">ClearSignal</span>
             <p className="text-[11px] text-slate-400 -mt-0.5">Aura, your health companion</p>
@@ -425,8 +432,8 @@ export default function ChatPage() {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <aside className="hidden lg:flex flex-col w-72 border-r border-slate-200/70 bg-white/70 backdrop-blur-sm overflow-y-auto scrollbar-thin p-4 gap-4 shrink-0">
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3.5">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
               Signed in as
             </p>
             <p className="text-sm font-medium text-slate-800">{profile.username}</p>
@@ -441,16 +448,16 @@ export default function ChatPage() {
 
           <HealthLogForm prefillSymptoms={lastSymptoms} />
 
-          <div className="mt-auto space-y-2">
+          <div className="mt-auto space-y-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-3">
             <button
               onClick={handleSaveConversation}
-              className="w-full flex items-center justify-center gap-2 text-sm text-slate-600 hover:text-teal-600 py-2 border border-slate-200 rounded-xl hover:border-teal-300 transition-colors"
+              className="w-full flex items-center justify-center gap-2 text-sm text-slate-600 hover:text-teal-600 py-2 rounded-xl hover:bg-teal-50 transition-colors"
             >
               {conversationSaved ? "✓ Saved!" : "Save Conversation"}
             </button>
             <button
               onClick={handleNewChat}
-              className="w-full flex items-center justify-center gap-2 text-sm text-slate-600 hover:text-slate-800 py-2 border border-slate-200 rounded-xl hover:border-slate-300 transition-colors"
+              className="w-full flex items-center justify-center gap-2 text-sm text-slate-600 hover:text-slate-800 py-2 rounded-xl hover:bg-slate-50 transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               New Chat
@@ -466,13 +473,40 @@ export default function ChatPage() {
         <main className="flex flex-col flex-1 overflow-hidden">
           <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-4">
             <div className="max-w-2xl mx-auto">
-              {messages.map((msg) => (
-                <ChatMessage
-                  key={msg.id}
-                  message={msg}
-                  onSpeak={(text) => speak(text, profile?.preferredLanguage)}
-                />
-              ))}
+              {messages.length === 1 && messages[0].id === "welcome" && (
+                <div className="flex flex-col items-center text-center pt-6 pb-8">
+                  <TalkingAvatar state={avatarState} level={avatarLevel} size={104} />
+                  <h1 className="mt-4 text-xl font-semibold text-slate-900">Hi, I&apos;m Aura</h1>
+                  <p className="mt-1.5 max-w-sm text-sm text-slate-500">
+                    ClearSignal&apos;s AI companion — ask about symptoms, exposure, or testing, and I&apos;ll ground my answers in real CDC data.
+                  </p>
+                  <div className="mt-5 flex flex-wrap justify-center gap-2 max-w-md">
+                    {[
+                      "What does a negative Lyme test really mean?",
+                      "How do I log a symptom?",
+                      "What should I ask my doctor?",
+                    ].map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        type="button"
+                        onClick={() => sendMessage(suggestion)}
+                        className="px-3.5 py-2 rounded-full bg-white border border-slate-200 text-xs text-slate-600 shadow-sm hover:border-teal-300 hover:text-teal-700 hover:shadow transition-all"
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {messages
+                .filter((msg) => msg.id !== "welcome")
+                .map((msg) => (
+                  <ChatMessage
+                    key={msg.id}
+                    message={msg}
+                    onSpeak={(text) => speak(text, profile?.preferredLanguage)}
+                  />
+                ))}
               {streaming && messages[messages.length - 1]?.content === "" && (
                 <div className="flex gap-3 mb-4 items-center">
                   <TalkingAvatar state="thinking" size={32} />
@@ -506,7 +540,7 @@ export default function ChatPage() {
           <div className="bg-white/90 backdrop-blur-sm border-t border-slate-200/70 px-4 py-3">
             <div className="max-w-2xl mx-auto">
               <div className="flex gap-2 items-end">
-                <TalkingAvatar state={avatarState} level={avatarLevel} size={44} className="mb-0.5" />
+                <TalkingAvatar state={avatarState} level={avatarLevel} size={50} className="mb-0.5" />
                 <textarea
                   ref={inputRef}
                   value={input}
