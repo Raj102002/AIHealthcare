@@ -39,7 +39,7 @@ const WELCOME: Message = {
   id: "welcome",
   role: "assistant",
   content:
-    "Hello! I'm your HealthAI Assistant. I can help with general health questions, symptom information, and wellness guidance.\n\n⚕️ Important: I provide general information only — I'm not a substitute for professional medical advice. For any medical concerns, please consult a qualified healthcare provider.\n\nHow can I help you today? Please describe what you're experiencing, and I'll ask a few follow-up questions to better understand your situation.",
+    "Hi, I'm Aura, ClearSignal's AI companion. I can help with general health questions, symptom information, and wellness guidance.\n\n⚕️ Important: I provide general information only — I'm not a substitute for professional medical advice. For any medical concerns, please consult a qualified healthcare provider.\n\nHow can I help you today? Please describe what you're experiencing, and I'll ask a few follow-up questions to better understand your situation.",
   timestamp: new Date().toISOString(),
 };
 
@@ -347,13 +347,13 @@ export default function ChatPage() {
   }
 
   const voiceStatus = isSpeaking
-    ? "Speaking response"
+    ? "Aura is speaking"
     : voiceState === "listening"
-    ? "Listening"
+    ? "Aura is listening"
     : voiceState === "transcribing"
     ? "Transcribing your question"
     : streaming
-    ? "Thinking"
+    ? "Aura is thinking"
     : "";
 
   const avatarState: AvatarState = isSpeaking
@@ -384,7 +384,7 @@ export default function ChatPage() {
           <TalkingAvatar state={avatarState} level={avatarLevel} size={38} />
           <div className="leading-tight">
             <span className="font-semibold text-slate-900 tracking-tight">ClearSignal</span>
-            <p className="text-[11px] text-slate-400 -mt-0.5">Lyme diagnostic support</p>
+            <p className="text-[11px] text-slate-400 -mt-0.5">Aura, your health companion</p>
           </div>
         </div>
 
@@ -477,7 +477,7 @@ export default function ChatPage() {
                 <div className="flex gap-3 mb-4 items-center">
                   <TalkingAvatar state="thinking" size={32} />
                   <div className="bg-white border border-slate-100 shadow-sm rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-slate-400">
-                    Thinking...
+                    Aura is thinking...
                   </div>
                 </div>
               )}

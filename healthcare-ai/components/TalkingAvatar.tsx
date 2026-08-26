@@ -81,12 +81,12 @@ export default function TalkingAvatar({ state, level = 0, size = 72, className =
       role="img"
       aria-label={
         state === "listening"
-          ? "Assistant is listening"
+          ? "Aura is listening"
           : state === "speaking"
-          ? "Assistant is speaking"
+          ? "Aura is speaking"
           : state === "thinking"
-          ? "Assistant is thinking"
-          : "Assistant is idle"
+          ? "Aura is thinking"
+          : "Aura"
       }
     >
       {/* Pulse ring — reacts to level while listening/speaking, breathes gently while idle */}
