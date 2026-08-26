@@ -5,6 +5,7 @@ import type { HandoffAnalysis } from "@/lib/handoff-analysis";
 import { checkRateLimit, clientKeyFrom } from "@/lib/rate-limit";
 import { withMetrics, recordTokenUsage } from "@/lib/metrics";
 import { handoffNarrativeRequestSchema, formatZodError } from "@/lib/validation";
+import { GROQ_GENERATION_MODEL } from "@/lib/models";
 
 const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -37,7 +38,7 @@ export const POST = withMetrics("handoff-narrative", async (request: NextRequest
     try {
       const groq = getGroq();
       const completion = await groq.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
+        model: GROQ_GENERATION_MODEL,
         max_tokens: 300,
         temperature: 0,
         messages: [

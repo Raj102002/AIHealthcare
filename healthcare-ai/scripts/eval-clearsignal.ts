@@ -19,9 +19,10 @@ import { fuseCandidates } from "@/lib/retrieval";
 import { rerank } from "@/lib/rerank";
 import { buildContext, buildSystemPrompt } from "@/lib/generation";
 import { fleschKincaidGrade } from "@/lib/readability";
+import { GROQ_GENERATION_MODEL } from "@/lib/models";
 
-const GENERATION_MODEL = "llama-3.3-70b-versatile";
-const JUDGE_MODEL = "llama-3.3-70b-versatile";
+const GENERATION_MODEL = GROQ_GENERATION_MODEL;
+const JUDGE_MODEL = GROQ_GENERATION_MODEL;
 
 type Behavior = "answer" | "refuse" | "clarify" | "escalate";
 

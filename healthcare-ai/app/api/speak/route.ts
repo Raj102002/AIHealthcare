@@ -4,6 +4,7 @@ import { checkRateLimit, clientKeyFrom } from "@/lib/rate-limit";
 import { withMetrics } from "@/lib/metrics";
 import { cached, cacheKeyFromText } from "@/lib/cache";
 import { speakRequestSchema, formatZodError } from "@/lib/validation";
+import { GROQ_TTS_MODEL } from "@/lib/models";
 
 const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -36,7 +37,7 @@ export const POST = withMetrics("speak", async (request: NextRequest) => {
     const audio = await cached(`tts:${cacheKeyFromText(trimmedText)}`, TTS_CACHE_TTL_MS, async () => {
       const speech = await getGroq().audio.speech.create({
         input: trimmedText,
-        model: "playai-tts",
+        model: GROQ_TTS_MODEL,
         voice: "Fritz-PlayAI",
         response_format: "mp3",
       });

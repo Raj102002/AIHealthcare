@@ -6,12 +6,13 @@ import { withMetrics, recordTokenUsage } from "@/lib/metrics";
 import { journalAgentRequestSchema, formatZodError } from "@/lib/validation";
 import { JOURNAL_TOOLS, dispatchTool } from "@/lib/journal-tools";
 import { logger } from "@/lib/logger";
+import { GROQ_GENERATION_MODEL } from "@/lib/models";
 
 const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const RATE_LIMIT = 15;
 const RATE_WINDOW_MS = 10 * 60 * 1000;
-const MODEL = "llama-3.3-70b-versatile";
+const MODEL = GROQ_GENERATION_MODEL;
 const MAX_ITERATIONS = 5;
 
 const SYSTEM_PROMPT = `You are a data-analysis assistant that answers questions about a patient's own symptom journal using the tools provided. You are not a diagnostic tool.

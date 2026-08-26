@@ -2,6 +2,7 @@ import Groq from "groq-sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, clientKeyFrom } from "@/lib/rate-limit";
 import { withMetrics } from "@/lib/metrics";
+import { GROQ_TRANSCRIBE_MODEL } from "@/lib/models";
 
 const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -39,7 +40,7 @@ export const POST = withMetrics("transcribe", async (request: NextRequest) => {
 
     const transcription = await getGroq().audio.transcriptions.create({
       file,
-      model: "whisper-large-v3-turbo",
+      model: GROQ_TRANSCRIBE_MODEL,
       prompt: DOMAIN_VOCABULARY_PROMPT,
       ...(typeof language === "string" && language ? { language } : {}),
     });

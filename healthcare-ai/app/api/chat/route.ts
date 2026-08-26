@@ -11,6 +11,7 @@ import { recordRequest, recordTokenUsage } from "@/lib/metrics";
 import { chatRequestSchema, formatZodError } from "@/lib/validation";
 import { flagPromptInjection } from "@/lib/prompt-injection";
 import { logger } from "@/lib/logger";
+import { GROQ_GENERATION_MODEL } from "@/lib/models";
 
 const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -106,7 +107,7 @@ export async function POST(request: NextRequest) {
       : lastMessage.content;
 
     const stream = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: GROQ_GENERATION_MODEL,
       max_tokens: 1024,
       messages: [
         { role: "system", content: systemPrompt },
@@ -138,7 +139,7 @@ export async function POST(request: NextRequest) {
             route: "chat",
             durationMs: Date.now() - requestStart,
             status: "success",
-            model: "llama-3.3-70b-versatile",
+            model: GROQ_GENERATION_MODEL,
             promptTokens,
             completionTokens,
           });

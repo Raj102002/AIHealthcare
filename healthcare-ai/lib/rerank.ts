@@ -1,6 +1,7 @@
 import Groq from "groq-sdk";
 import type { RetrievedChunk } from "@/types/rag";
 import { recordTokenUsage } from "@/lib/metrics";
+import { GROQ_RERANK_MODEL } from "@/lib/models";
 
 // llama-3.1-8b-instant was tried first (cheaper/faster) but reliably ignored explicit
 // disease-mismatch instructions and few-shot examples in this batch-scoring prompt —
@@ -9,7 +10,7 @@ import { recordTokenUsage } from "@/lib/metrics";
 // with the same prompt took evals/rag.jsonl's unanswerable-set refusal rate from
 // 20-40% to 100% (5/5) with no regression on the 15 answerable cases (still 100%
 // hit rate) — verified via `npm run eval`.
-const RERANK_MODEL = "llama-3.3-70b-versatile";
+const RERANK_MODEL = GROQ_RERANK_MODEL;
 
 // Below this (out of 10) a chunk is treated as not actually relevant and dropped,
 // rather than passed to the generation prompt as noise. Calibrated against

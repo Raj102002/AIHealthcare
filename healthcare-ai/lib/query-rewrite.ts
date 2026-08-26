@@ -1,7 +1,8 @@
 import type Groq from "groq-sdk";
 import { recordTokenUsage } from "@/lib/metrics";
+import { GROQ_REWRITE_MODEL } from "@/lib/models";
 
-const REWRITE_MODEL = "llama-3.1-8b-instant";
+const REWRITE_MODEL = GROQ_REWRITE_MODEL;
 const HISTORY_TURNS = 3;
 
 export interface ChatTurn {
