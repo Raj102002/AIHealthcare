@@ -58,10 +58,10 @@ that never diagnoses.
 | **AI Integration** | Hybrid RAG chat (dense + BM25 + Reciprocal Rank Fusion + LLM rerank), grounded in a CDC Lyme disease corpus, with query rewriting for follow-ups and a hard relevance threshold (empty context → the model says so, never guesses). A separately guarded LLM call generates the clinician-handoff narrative, validated against a banned-phrase/condition-name list with an always-available deterministic template fallback. Voice input (Groq Whisper, domain-vocabulary-seeded) and output (Groq TTS, browser-`SpeechSynthesis` fallback) layer on top. A real agentic feature — `/api/journal-agent`, a Groq tool-calling loop over the patient's own journal data — was also built this cycle (see the updated Agentic AI section below). This is not a bare chatbot wrapper — see `design.md` section 4 for the full component diagram. Rate limiting, loading states, and distinct error messages (permission denied / no microphone / network failure / empty transcript, etc.) are implemented on every AI-calling route, including `/api/chat` and `/api/exposure`, which were the two gaps in the prior pass — **now closed**. |
 | **Backend & Database** | Back4App (Parse Server / MongoDB). Seven classes with full CRUD: `HealthLog`, `Conversation` (pre-existing), `SymptomEntry`, `FunctionEntry`, `TimelineAnchor`, `ClinicalEncounter`, `RashPhoto` (this build-phase cycle). Every write path sets an owner-scoped ACL (`new Parse.ACL(user)`) before saving — verified by direct code review, not assumed. Compound indexes for the journal classes now have a real, idempotent creation script (`scripts/setup-indexes.ts`) — see the updated Database Optimization section. |
 | **Authentication** | Parse User registration/login/session persistence. Every protected page checks `getCurrentUser()` and redirects unauthenticated visitors; ACLs enforce the same boundary server-side regardless of client-side checks. Secrets (`GROQ_API_KEY`, Back4App app/JS keys, `UPSTASH_VECTOR_REST_URL`/`TOKEN`) live in `.env.local`, never committed — `.env.local.example` documents what's needed without real values. |
-| **Documentation** | README covers AI integration, setup instructions, and tech stack, plus the required author/link block (name, Z-number, FAU email, deployed link — see `healthcare-ai/README.md`). `healthcare-ai/docs/deployment.md` (new this cycle) covers local dev, Docker, Netlify, database setup, eval harness, and observability end to end. **[OPEN]**: demo video link still pending. |
+| **Documentation** | README covers AI integration, setup instructions, and tech stack, plus the required author/link block (name, Z-number, FAU email, deployed link — see `healthcare-ai/README.md`). `healthcare-ai/docs/deployment.md` (new this cycle) covers local dev, Docker, Netlify, database setup, eval harness, and observability end to end. Demo video link is now live in the README. |
 | **Deployment** | Live at **[healwithaura.netlify.app/chat](https://healwithaura.netlify.app/chat)** (Netlify, `netlify.toml` at this repo's root, `base = "healthcare-ai"`). **Confirmed live, not just pushed:** `/`, `/chat`, `/journal`, and `/admin` all return HTTP 200, and this cycle's new routes specifically (`/api/journal-agent`, `/api/admin/metrics`, `/admin`) are present on the deployed site (verified via direct HTTP checks, not assumed from the git history) — so the fresh production deploy of this cycle's changes did go out, closing the earlier "not confirmed" gap. |
 | **GitHub Repository** | Implementation history lives in `week2-Raj102002` / `week3-Raj102002` (RAG/voice rebuild, then the ClearSignal pivot, then this build-phase's Production Engineering/Security/Agentic AI pass — each logically-scoped commit explains the *why*, not just the *what*). This repo (`buildphase-Raj102002`) now holds both the planning docs and a synced copy of the implementation, per the later clarification that both were wanted here. |
-| **Demo Video** | **[NOT YET RECORDED]** — scheduled for the week the deployed MVP is stable (see timeline). |
+| **Demo Video** | Recorded and live at [youtu.be/HF35uvYdDJ8](https://youtu.be/HF35uvYdDJ8), linked from both READMEs. |
 | **Canvas Submission** | Submitted by the author after this repo is pushed. |
 
 ### 2.2 Build-Phase Requirements
@@ -327,8 +327,7 @@ complete** (marked accordingly); Weeks 4–6 remain the real, open plan.
   added. **Still open:** a fresh Netlify production deploy of this cycle's
   code was not triggered/confirmed in this session (no dashboard/CLI access)
   — see `docs/deployment.md` section 3. README author-info fields (Z-number,
-  deployed link) are filled in; demo video link is still pending (script
-  ready, see Week 6).
+  deployed link, demo video link) are filled in.
 
 ### Week 2 — Close security & observability gaps — **done**
 - **Goal:** address the Production Engineering and Security items previously
@@ -388,12 +387,11 @@ complete** (marked accordingly); Weeks 4–6 remain the real, open plan.
   one-page showcase handout for attendees
   (`artifacts/ClearSignal_Showcase_Handout.pptx`); a scene-by-scene demo
   video script/shot-list (`docs/demo-video-script.md`) timed to 4 minutes;
-  live-deploy spot-check confirmed `/chat` responds. **Still open:** the
-  demo video itself has not been recorded (script is ready — recording,
-  captioning, and uploading is a human-narration step this session can't
-  do), and the deployed app has not had a full manual click-through pass
-  this cycle to catch UI regressions before the showcase. Canvas submission
-  (posting the repo URL) is a manual step for the author.
+  demo video recorded and uploaded ([youtu.be/HF35uvYdDJ8](https://youtu.be/HF35uvYdDJ8),
+  linked from both READMEs); live-deploy spot-check confirmed `/chat`
+  responds. **Still open:** the deployed app has not had a full manual
+  click-through pass this cycle to catch UI regressions before the showcase.
+  Canvas submission (posting the repo URL) is a manual step for the author.
 
 ### MVP scope vs. nice-to-have
 
