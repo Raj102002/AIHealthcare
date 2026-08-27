@@ -6,7 +6,7 @@
 | **Z-Number** | Z23879546 |
 | **FAU Email** | rsurisetty2025@fau.edu |
 | **Deployed App** | [healwithaura.netlify.app/chat](https://healwithaura.netlify.app/chat) |
-| **Demo Video** | `[PENDING — script ready at docs/demo-video-script.md, see plan.md Week 6]` |
+| **Demo Video** | [youtu.be/HF35uvYdDJ8](https://youtu.be/HF35uvYdDJ8) |
 | **Pitch Deck** | [`artifacts/ClearSignal_Pitch_Deck.pptx`](../artifacts/ClearSignal_Pitch_Deck.pptx) (repo root) |
 | **Planning Docs** | [`plan.md`](../plan.md), [`design.md`](../design.md) (repo root) |
 | **Full Artifact Index** | [`README.md`](../README.md) (repo root) |

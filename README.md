@@ -22,7 +22,7 @@ Everything required for the final showcase submission, in one place.
 | Artifact | Where |
 |---|---|
 | **Deployed application** | [healwithaura.netlify.app/chat](https://healwithaura.netlify.app/chat) — live Netlify deployment |
-| **Demo video (3–5 min)** | `[PENDING — record from healthcare-ai/docs/demo-video-script.md, then paste the YouTube/Vimeo link here]` |
+| **Demo video (3–5 min)** | [youtu.be/HF35uvYdDJ8](https://youtu.be/HF35uvYdDJ8) |
 | **Pitch deck** | [`artifacts/ClearSignal_Pitch_Deck.pptx`](artifacts/ClearSignal_Pitch_Deck.pptx) — 15 slides + speaker notes, problem → solution → architecture → results → roadmap |
 | **One-page project summary** (Canvas intent, Aug 19) | [`artifacts/ClearSignal_Showcase_Intent.pptx`](artifacts/ClearSignal_Showcase_Intent.pptx) |
 | **Showcase handout** (for attendees, print-ready single page) | [`artifacts/ClearSignal_Showcase_Handout.pptx`](artifacts/ClearSignal_Showcase_Handout.pptx) |
