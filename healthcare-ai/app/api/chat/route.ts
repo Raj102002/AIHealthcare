@@ -13,6 +13,7 @@ import { chatRequestSchema, formatZodError } from "@/lib/validation";
 import { flagPromptInjection } from "@/lib/prompt-injection";
 import { logger } from "@/lib/logger";
 import { GROQ_GENERATION_MODEL, GROQ_REASONING_EFFORT } from "@/lib/models";
+import { computeEvidenceTier } from "@/lib/evidence-tier";
 
 const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -22,13 +23,14 @@ const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
 const RATE_LIMIT = 60;
 const RATE_WINDOW_MS = 10 * 60 * 1000;
 
-function redFlagResponse(copy: string, severity: string): NextResponse {
+function redFlagResponse(copy: string, severity: string, evidenceTier: string): NextResponse {
   const prefixed = severity === "urgent" ? copy : `[EMERGENCY]\n${copy}`;
   return new NextResponse(prefixed, {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
       "X-Content-Type-Options": "nosniff",
       "X-Red-Flag": severity,
+      "X-Evidence-Tier": evidenceTier,
     },
   });
 }
@@ -75,7 +77,7 @@ export async function POST(request: NextRequest) {
     const redFlag = screenRedFlags(lastMessage.content);
     if (redFlag) {
       recordRequest({ route: "chat", durationMs: Date.now() - requestStart, status: "success", model: `red-flag:${redFlag.rule.id}` });
-      return redFlagResponse(redFlag.rule.copy, redFlag.rule.severity);
+      return redFlagResponse(redFlag.rule.copy, redFlag.rule.severity, "no_diagnosis_applicable");
     }
 
     // Non-blocking, deterministic, no model in the loop — the same tick that
@@ -100,6 +102,7 @@ export async function POST(request: NextRequest) {
 
     const rewrittenQuery = await rewriteQuery(history, lastMessage.content, groq);
     const retrieved = await retrieve(rewrittenQuery, groq);
+    const evidenceTier = computeEvidenceTier(retrieved);
     const { sources, chunks } = buildContext(retrieved);
 
     // Context goes in as its own system turn, and the user's message is sent
@@ -159,6 +162,7 @@ export async function POST(request: NextRequest) {
       "Content-Type": "text/plain; charset=utf-8",
       "X-Content-Type-Options": "nosniff",
       "X-RAG-Sources": Buffer.from(JSON.stringify(sources)).toString("base64"),
+      "X-Evidence-Tier": evidenceTier,
     };
     if (coinfectionNotes.length > 0) {
       headers["X-Coinfection-Notes"] = Buffer.from(JSON.stringify(coinfectionNotes)).toString("base64");

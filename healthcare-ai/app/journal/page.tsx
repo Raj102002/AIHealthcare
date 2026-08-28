@@ -112,7 +112,7 @@ export default function JournalPage() {
           <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center">
             <Heart className="w-4 h-4 text-white" fill="white" />
           </div>
-          <span className="font-semibold text-slate-900">HealthAI</span>
+          <span className="font-semibold text-slate-900">ClearSignal</span>
         </div>
         <div className="flex items-center gap-1">
           <Link
@@ -624,6 +624,7 @@ function EncountersTab() {
   const [toldWhat, setToldWhat] = useState("");
   const [ruledOut, setRuledOut] = useState("");
   const [testsOrdered, setTestsOrdered] = useState("");
+  const [treatmentsTried, setTreatmentsTried] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -650,11 +651,13 @@ function EncountersTab() {
         toldWhat,
         ruledOut: ruledOut.split(",").map((s) => s.trim()).filter(Boolean),
         testsOrdered: testsOrdered.split(",").map((s) => s.trim()).filter(Boolean),
+        treatmentsTried: treatmentsTried.split(",").map((s) => s.trim()).filter(Boolean),
       });
       setSpecialty("");
       setToldWhat("");
       setRuledOut("");
       setTestsOrdered("");
+      setTreatmentsTried("");
       await load();
     } finally {
       setSaving(false);
@@ -685,6 +688,9 @@ function EncountersTab() {
           </Field>
           <Field label="Tests ordered (comma-separated)">
             <input value={testsOrdered} onChange={(e) => setTestsOrdered(e.target.value)} className={inputClass} />
+          </Field>
+          <Field label="Treatments you've tried (comma-separated)">
+            <input value={treatmentsTried} onChange={(e) => setTreatmentsTried(e.target.value)} placeholder="e.g. doxycycline, rest, ibuprofen" className={inputClass} />
           </Field>
           <SubmitButton loading={saving} label="Log encounter" />
         </form>
@@ -717,6 +723,9 @@ function EncountersTab() {
               {enc.toldWhat && <div className="text-xs text-slate-500 mt-1">{enc.toldWhat}</div>}
               {enc.ruledOut.length > 0 && (
                 <div className="text-xs text-slate-400 mt-1">Ruled out: {enc.ruledOut.join(", ")}</div>
+              )}
+              {enc.treatmentsTried.length > 0 && (
+                <div className="text-xs text-slate-400 mt-1">Treatments tried: {enc.treatmentsTried.join(", ")}</div>
               )}
             </li>
           ))}

@@ -46,8 +46,8 @@ export default function MicButton({ state, level, isSpeaking, disabled, onStart,
       aria-pressed={state === "listening"}
       className={`relative p-2.5 rounded-xl transition-colors shrink-0 ${
         state === "listening" || isSpeaking
-          ? "bg-red-50 hover:bg-red-100 text-red-600"
-          : "bg-slate-100 hover:bg-slate-200 text-slate-600 disabled:opacity-50"
+          ? "bg-red-500/20 hover:bg-red-500/30 text-red-300"
+          : "bg-white/5 hover:bg-white/10 text-slate-300 disabled:opacity-50"
       }`}
     >
       {state === "listening" && (

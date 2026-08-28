@@ -12,6 +12,7 @@ export interface Message {
   isEmergency?: boolean;
   sources?: import("./rag").CitedSource[];
   coinfectionNotes?: CoinfectionNote[];
+  evidenceTier?: string;
 }
 
 export interface Vitals {

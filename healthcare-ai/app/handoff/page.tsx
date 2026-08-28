@@ -125,7 +125,7 @@ export default function HandoffPage() {
           <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center">
             <Heart className="w-4 h-4 text-white" fill="white" />
           </div>
-          <span className="font-semibold text-slate-900">HealthAI</span>
+          <span className="font-semibold text-slate-900">ClearSignal</span>
         </div>
         <div className="flex items-center gap-1">
           <Link
@@ -305,6 +305,12 @@ export default function HandoffPage() {
                       {new Date(enc.occurredAt).toLocaleDateString()} — {enc.specialty}
                     </span>
                     {enc.ruledOut.length > 0 && <span>: ruled out {enc.ruledOut.join(", ")}</span>}
+                    {enc.testsOrdered.length > 0 && (
+                      <div className="text-slate-500">Tests ordered: {enc.testsOrdered.join(", ")}</div>
+                    )}
+                    {enc.treatmentsTried.length > 0 && (
+                      <div className="text-slate-500">Treatments tried (patient-reported): {enc.treatmentsTried.join(", ")}</div>
+                    )}
                   </li>
                 ))}
               </ul>

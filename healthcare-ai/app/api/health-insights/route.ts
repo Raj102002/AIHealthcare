@@ -1,33 +1,35 @@
 import Groq from "groq-sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { GROQ_GENERATION_MODEL, GROQ_REASONING_EFFORT } from "@/lib/models";
+import { checkRateLimit, clientKeyFrom } from "@/lib/rate-limit";
+import { withMetrics } from "@/lib/metrics";
+import { healthInsightsRequestSchema, formatZodError } from "@/lib/validation";
 
 const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-interface LogEntry {
-  symptoms: string;
-  severity: "low" | "medium" | "high";
-  notes?: string;
-  createdAt: string;
-  vitals?: Record<string, unknown>;
-}
+// This route was found without rate limiting, zod validation, or withMetrics
+// during the v2 pass -- every other Groq-calling route already has all
+// three. It's not dead code (components/HealthInsights.tsx on the dashboard
+// calls it), so it gets brought up to the same bar rather than removed.
+const RATE_LIMIT = 15;
+const RATE_WINDOW_MS = 10 * 60 * 1000;
 
-interface UserProfile {
-  age?: number;
-  bloodType?: string;
-  allergies?: string[];
-  conditions?: string[];
-  medications?: string[];
-}
+export const POST = withMetrics("health-insights", async (request: NextRequest) => {
+  const { allowed, retryAfterSeconds } = checkRateLimit(`health-insights:${clientKeyFrom(request)}`, RATE_LIMIT, RATE_WINDOW_MS);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Rate limit reached. Please wait a moment and try again." },
+      { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } }
+    );
+  }
 
-export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { logs, profile } = body as { logs: LogEntry[]; profile?: UserProfile };
-
-    if (!logs || !Array.isArray(logs)) {
-      return NextResponse.json({ error: "logs array is required" }, { status: 400 });
+    const rawBody = await request.json();
+    const parsed = healthInsightsRequestSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
     }
+    const { logs, profile } = parsed.data;
 
     if (logs.length === 0) {
       return NextResponse.json({
@@ -102,4 +104,4 @@ Be concise and practical. This is general wellness guidance only.`;
     const message = error instanceof Error ? error.message : "Failed to generate insights";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

@@ -62,7 +62,12 @@ export const GET = withMetrics("providers", async (request: NextRequest) => {
       };
     });
 
-    return NextResponse.json({ providers });
+    return NextResponse.json({
+      providers,
+      disclaimer:
+        "Results are matched by specialty and location only -- they are not ranked by suitability " +
+        "for your situation, which is a clinical judgment this app doesn't make.",
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });

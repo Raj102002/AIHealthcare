@@ -171,6 +171,7 @@ export async function saveClinicalEncounter(data: Omit<ClinicalEncounter, "objec
   encounter.set("toldWhat", data.toldWhat);
   encounter.set("ruledOut", data.ruledOut);
   encounter.set("testsOrdered", data.testsOrdered);
+  encounter.set("treatmentsTried", data.treatmentsTried);
   return encounter.save();
 }
 
@@ -244,6 +245,7 @@ export async function getClinicalEncounters(): Promise<ClinicalEncounter[]> {
     toldWhat: r.get("toldWhat"),
     ruledOut: r.get("ruledOut") ?? [],
     testsOrdered: r.get("testsOrdered") ?? [],
+    treatmentsTried: r.get("treatmentsTried") ?? [],
   }));
 }
 

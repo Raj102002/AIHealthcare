@@ -14,16 +14,18 @@ import { parseMarkdownDoc, recursiveSplit, hashChunk } from "@/lib/chunking";
 import { buildTabularChunks } from "@/lib/tabular-chunks";
 import { getVectorIndex } from "@/lib/vector-client";
 import { fleschKincaidGrade } from "@/lib/readability";
+import { populatedConditions } from "@/lib/conditions/registry";
+import type { ConditionConfig } from "@/lib/conditions/types";
 import type { Chunk, ChunkContentMetadata } from "@/types/rag";
 
 const ROOT = process.cwd();
-const CORPUS_DIR = path.join(ROOT, "corpus");
 const DATA_DIR = path.join(ROOT, "data");
 const MANIFEST_PATH = path.join(DATA_DIR, "ingest-manifest.json");
 const CORPUS_OUT_PATH = path.join(DATA_DIR, "corpus.json");
 
-// The county/state/race CSVs are drawn from CDC's 2023-vintage surveillance export
-// (see hhs-rag/README.md) — this reflects the data's known vintage, not a guess.
+// The county/state/race/age-group CSVs are drawn from CDC's 2023-vintage
+// surveillance export family (see hhs-rag/README.md) — this reflects the
+// data's known vintage, not a guess.
 const SURVEILLANCE_DATASET_VERSION = "cdc-surveillance-2023";
 
 type Manifest = Record<string, { content_hash: string; retrieved_at: string }>;
@@ -33,12 +35,14 @@ function loadManifest(): Manifest {
   return JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf-8")) as Manifest;
 }
 
-function buildMarkdownChunks(): { id: string; text: string; metadata: ChunkContentMetadata }[] {
+function buildMarkdownChunks(condition: ConditionConfig): { id: string; text: string; metadata: ChunkContentMetadata }[] {
   const chunks: { id: string; text: string; metadata: ChunkContentMetadata }[] = [];
-  const files = fs.readdirSync(CORPUS_DIR).filter((f) => f.endsWith(".md"));
+  const corpusDir = path.join(ROOT, condition.corpusDir);
+  if (!fs.existsSync(corpusDir)) return chunks;
+  const files = fs.readdirSync(corpusDir).filter((f) => f.endsWith(".md"));
 
   for (const file of files) {
-    const raw = fs.readFileSync(path.join(CORPUS_DIR, file), "utf-8");
+    const raw = fs.readFileSync(path.join(corpusDir, file), "utf-8");
     const doc = parseMarkdownDoc(raw);
 
     for (const section of doc.sections) {
@@ -56,6 +60,7 @@ function buildMarkdownChunks(): { id: string; text: string; metadata: ChunkConte
             dataset_version: doc.datasetVersion,
             audience: doc.audience,
             reading_level: fleschKincaidGrade(piece),
+            condition: condition.id,
           },
         });
       });
@@ -64,20 +69,32 @@ function buildMarkdownChunks(): { id: string; text: string; metadata: ChunkConte
   return chunks;
 }
 
-function buildCsvChunks(): { id: string; text: string; metadata: ChunkContentMetadata }[] {
-  const countyCsv = fs.readFileSync(path.join(DATA_DIR, "county_long.csv"), "utf-8");
-  const raceCsv = fs.readFileSync(path.join(DATA_DIR, "race_long.csv"), "utf-8");
+// Lyme is currently the only condition with tabular (CSV) data, and
+// buildTabularChunks() is still specific to its 4 known files/shapes — a
+// future condition with different tabular data gets its own branch here
+// rather than a fully generic CSV-to-chunk-builder dispatch, since chunk
+// text generation is genuinely dataset-specific (see lib/tabular-chunks.ts),
+// not a mechanical transform that generalizes for free.
+function buildCsvChunks(condition: ConditionConfig): { id: string; text: string; metadata: ChunkContentMetadata }[] {
+  if (condition.id !== "lyme") return [];
 
-  return buildTabularChunks(countyCsv, raceCsv).map((c) => ({
+  const dataDir = path.join(ROOT, condition.dataDir);
+  const countyCsv = fs.readFileSync(path.join(dataDir, "county_long.csv"), "utf-8");
+  const raceCsv = fs.readFileSync(path.join(dataDir, "race_long.csv"), "utf-8");
+  const ageYearCsv = fs.readFileSync(path.join(dataDir, "age_group_year_long.csv"), "utf-8");
+  const ageSexRateCsv = fs.readFileSync(path.join(dataDir, "age_group_sex_rate_long.csv"), "utf-8");
+
+  return buildTabularChunks(countyCsv, raceCsv, ageYearCsv, ageSexRateCsv).map((c) => ({
     id: c.id,
     text: `${c.sourceName} — ${c.sectionPath}\n\n${c.text}`,
     metadata: {
       source_name: c.sourceName,
-      source_url: "",
+      source_url: c.sourceUrl,
       section_path: c.sectionPath,
       dataset_version: SURVEILLANCE_DATASET_VERSION,
       audience: "clinician",
       reading_level: fleschKincaidGrade(c.text),
+      condition: condition.id,
     },
   }));
 }
@@ -93,7 +110,10 @@ async function main() {
   const manifest = loadManifest();
   const nowIso = new Date().toISOString();
 
-  const rawChunks = [...buildMarkdownChunks(), ...buildCsvChunks()];
+  const rawChunks = populatedConditions().flatMap((condition) => [
+    ...buildMarkdownChunks(condition),
+    ...buildCsvChunks(condition),
+  ]);
 
   const chunks: Chunk[] = [];
   let created = 0;

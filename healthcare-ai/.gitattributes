@@ -1,0 +1,8 @@
+# The corpus markdown parser (lib/chunking.ts) is now CRLF-tolerant, but this
+# still forces LF on checkout so the raw files stay byte-identical to what's
+# committed regardless of a contributor's core.autocrlf setting -- a
+# git-mv-triggered CRLF rewrite on a Windows checkout is what caused every
+# corpus doc's frontmatter to silently parse as "Untitled" during this
+# project's Phase 0 restructuring (see lib/chunking.ts's parseMarkdownDoc
+# comment).
+corpus/**/*.md text eol=lf

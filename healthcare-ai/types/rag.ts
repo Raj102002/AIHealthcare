@@ -8,6 +8,11 @@ export interface ChunkContentMetadata {
   dataset_version: string;
   audience: "patient" | "clinician";
   reading_level: number;
+  // Which condition config (lib/conditions/registry.ts) this chunk belongs
+  // to. Lyme is the only populated condition today; this field exists so
+  // retrieval/eval can filter by condition once a second one is added,
+  // without a later migration of every existing chunk.
+  condition: string;
 }
 
 export interface ChunkMetadata extends ChunkContentMetadata {

@@ -91,7 +91,13 @@ function listEncounters(data: JournalData, args: { specialty_contains?: string }
   }
   return filtered
     .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt))
-    .map((e) => ({ date: e.occurredAt.slice(0, 10), specialty: e.specialty, toldWhat: e.toldWhat, ruledOut: e.ruledOut }));
+    .map((e) => ({
+      date: e.occurredAt.slice(0, 10),
+      specialty: e.specialty,
+      toldWhat: e.toldWhat,
+      ruledOut: e.ruledOut,
+      treatmentsTried: e.treatmentsTried,
+    }));
 }
 
 function getSymptomFreeInterval(data: JournalData, args: { symptom_label: string }) {

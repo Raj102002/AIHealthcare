@@ -200,6 +200,11 @@ export default function ChatPage() {
         throw new Error(serverMessage || `Request failed (HTTP ${res.status}). Please try again.`);
       }
 
+      const evidenceTier = res.headers.get("X-Evidence-Tier");
+      if (evidenceTier) {
+        setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, evidenceTier } : m)));
+      }
+
       const sourcesHeader = res.headers.get("X-RAG-Sources");
       if (sourcesHeader) {
         try {
@@ -367,16 +372,29 @@ export default function ChatPage() {
   const avatarLevel = isSpeaking ? speechLevel : voiceState === "listening" ? voiceLevel : 0;
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-b from-teal-50/40 via-slate-50 to-slate-50">
+    <div className="h-screen flex flex-col bg-midnight-950 text-slate-100">
       <div className="sr-only" role="status" aria-live="polite">
         {voiceStatus}
       </div>
 
-      {/* Decorative background depth — pure CSS, no assets, purely cosmetic */}
+      {/* Decorative background depth — pure CSS, no assets, purely cosmetic.
+          Faint dot grid + three glowing orbs (teal/cyan/violet) breathing at
+          staggered offsets, respecting data-low-stim via the global
+          animation-duration override in globals.css. */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden -z-10" aria-hidden="true">
-        <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-teal-200/30 blur-3xl" />
-        <div className="absolute top-1/3 -right-32 w-96 h-96 rounded-full bg-cyan-200/25 blur-3xl" />
-        <div className="absolute -bottom-32 left-1/4 w-96 h-96 rounded-full bg-teal-100/40 blur-3xl" />
+        <div
+          className="absolute inset-0 opacity-[0.06]"
+          style={{ backgroundImage: "radial-gradient(circle, #2dd4bf 1px, transparent 1px)", backgroundSize: "36px 36px" }}
+        />
+        <div className="absolute -top-24 -left-24 w-[32rem] h-[32rem] rounded-full bg-teal-500/25 blur-3xl animate-glow-pulse" />
+        <div
+          className="absolute top-1/3 -right-40 w-[32rem] h-[32rem] rounded-full bg-cyan-500/20 blur-3xl animate-glow-pulse"
+          style={{ animationDelay: "1.3s" }}
+        />
+        <div
+          className="absolute -bottom-40 left-1/4 w-[32rem] h-[32rem] rounded-full bg-violet-500/15 blur-3xl animate-glow-pulse"
+          style={{ animationDelay: "2.6s" }}
+        />
       </div>
 
       {showEmergency && (
@@ -387,11 +405,11 @@ export default function ChatPage() {
       )}
 
       {/* Top nav */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200/70 px-4 py-2.5 flex items-center justify-between shrink-0 shadow-sm shadow-slate-200/50 z-10">
+      <header className="glass-panel px-4 py-2.5 flex items-center justify-between shrink-0 z-10">
         <div className="flex items-center gap-2.5">
           <TalkingAvatar state={avatarState} level={avatarLevel} size={42} />
           <div className="leading-tight">
-            <span className="font-semibold text-slate-900 tracking-tight">ClearSignal</span>
+            <span className="font-display font-semibold text-slate-100 tracking-tight">ClearSignal</span>
             <p className="text-[11px] text-slate-400 -mt-0.5">Aura, your health companion</p>
           </div>
         </div>
@@ -399,21 +417,21 @@ export default function ChatPage() {
         <div className="flex items-center gap-1">
           <Link
             href="/journal"
-            className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-teal-700 px-3 py-1.5 rounded-lg hover:bg-teal-50 transition-colors"
+            className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-cyan-300 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
           >
             <NotebookPen className="w-4 h-4" />
             <span className="hidden sm:inline">Journal</span>
           </Link>
           <Link
             href="/test-context"
-            className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-teal-700 px-3 py-1.5 rounded-lg hover:bg-teal-50 transition-colors"
+            className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-cyan-300 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
           >
             <TestTube2 className="w-4 h-4" />
             <span className="hidden sm:inline">Test Timing</span>
           </Link>
           <Link
             href="/dashboard"
-            className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-teal-700 px-3 py-1.5 rounded-lg hover:bg-teal-50 transition-colors"
+            className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-cyan-300 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
           >
             <LayoutDashboard className="w-4 h-4" />
             <span className="hidden sm:inline">Dashboard</span>
@@ -421,7 +439,7 @@ export default function ChatPage() {
           <LowStimToggle />
           <button
             onClick={handleLogout}
-            className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-red-600 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
+            className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-red-400 px-3 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors"
           >
             <LogOut className="w-4 h-4" />
             <span className="hidden sm:inline">Sign Out</span>
@@ -431,13 +449,14 @@ export default function ChatPage() {
 
       {/* Main layout */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <aside className="hidden lg:flex flex-col w-72 border-r border-slate-200/70 bg-white/70 backdrop-blur-sm overflow-y-auto scrollbar-thin p-4 gap-4 shrink-0">
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3.5">
+        {/* Sidebar — a column of floating glass widgets rather than a flush
+            bordered panel, matching the "floating AR dashboard" direction. */}
+        <aside className="hidden lg:flex flex-col w-72 overflow-y-auto scrollbar-thin p-3 gap-3 shrink-0">
+          <div className="glass-panel rounded-2xl p-3.5">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
               Signed in as
             </p>
-            <p className="text-sm font-medium text-slate-800">{profile.username}</p>
+            <p className="text-sm font-medium text-slate-100">{profile.username}</p>
           </div>
 
           <UserProfilePanel
@@ -449,23 +468,23 @@ export default function ChatPage() {
 
           <HealthLogForm prefillSymptoms={lastSymptoms} />
 
-          <div className="mt-auto space-y-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-3">
+          <div className="mt-auto space-y-2 glass-panel rounded-2xl p-3">
             <button
               onClick={handleSaveConversation}
-              className="w-full flex items-center justify-center gap-2 text-sm text-slate-600 hover:text-teal-600 py-2 rounded-xl hover:bg-teal-50 transition-colors"
+              className="w-full flex items-center justify-center gap-2 text-sm text-slate-300 hover:text-teal-300 py-2 rounded-xl hover:bg-white/5 transition-colors"
             >
               {conversationSaved ? "✓ Saved!" : "Save Conversation"}
             </button>
             <button
               onClick={handleNewChat}
-              className="w-full flex items-center justify-center gap-2 text-sm text-slate-600 hover:text-slate-800 py-2 rounded-xl hover:bg-slate-50 transition-colors"
+              className="w-full flex items-center justify-center gap-2 text-sm text-slate-300 hover:text-slate-100 py-2 rounded-xl hover:bg-white/5 transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               New Chat
             </button>
           </div>
 
-          <div className="text-xs text-slate-400 text-center pt-2 border-t border-slate-100">
+          <div className="text-xs text-slate-500 text-center pt-2 border-t border-white/10">
             ⚕️ General wellness info only. Not medical advice.
           </div>
         </aside>
@@ -475,13 +494,19 @@ export default function ChatPage() {
           <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-4">
             <div className="max-w-2xl mx-auto">
               {messages.length === 1 && messages[0].id === "welcome" && (
-                <div className="flex flex-col items-center text-center pt-6 pb-8">
-                  <TalkingAvatar state={avatarState} level={avatarLevel} size={104} />
-                  <h1 className="mt-4 text-xl font-semibold text-slate-900">Hi, I&apos;m Aura</h1>
-                  <p className="mt-1.5 max-w-sm text-sm text-slate-500">
-                    ClearSignal&apos;s AI companion — ask about symptoms, exposure, or testing, and I&apos;ll ground my answers in real CDC data.
+                <div className="flex flex-col items-center text-center pt-10 pb-10">
+                  <div className="relative">
+                    <div className="absolute inset-0 rounded-full bg-teal-400/25 blur-2xl animate-glow-pulse" aria-hidden="true" />
+                    <TalkingAvatar state={avatarState} level={avatarLevel} size={104} />
+                  </div>
+                  <h1 className="mt-6 font-display text-2xl sm:text-3xl font-semibold text-slate-50 tracking-tight">
+                    Navigate complex symptoms with clarity
+                  </h1>
+                  <p className="mt-2.5 max-w-md text-sm text-slate-400">
+                    I&apos;m Aura, ClearSignal&apos;s AI companion — ask about symptoms, exposure, or testing, and
+                    I&apos;ll ground every answer in real CDC data, with sources and an honest confidence level.
                   </p>
-                  <div className="mt-5 flex flex-wrap justify-center gap-2 max-w-md">
+                  <div className="mt-6 flex flex-wrap justify-center gap-2 max-w-md">
                     {[
                       "What does a negative Lyme test really mean?",
                       "How do I log a symptom?",
@@ -491,7 +516,7 @@ export default function ChatPage() {
                         key={suggestion}
                         type="button"
                         onClick={() => sendMessage(suggestion)}
-                        className="px-3.5 py-2 rounded-full bg-white border border-slate-200 text-xs text-slate-600 shadow-sm hover:border-teal-300 hover:text-teal-700 hover:shadow transition-all"
+                        className="glass-panel rounded-full px-3.5 py-2 text-xs text-slate-200 hover:text-teal-300 hover:glow-ring-teal transition-all"
                       >
                         {suggestion}
                       </button>
@@ -511,7 +536,7 @@ export default function ChatPage() {
               {streaming && messages[messages.length - 1]?.content === "" && (
                 <div className="flex gap-3 mb-4 items-center">
                   <TalkingAvatar state="thinking" size={32} />
-                  <div className="bg-white border border-slate-100 shadow-sm rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-slate-400">
+                  <div className="glass-panel-strong rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-slate-400">
                     Aura is thinking...
                   </div>
                 </div>
@@ -520,11 +545,13 @@ export default function ChatPage() {
             </div>
           </div>
 
-          {/* Disclaimer bar */}
-          <div className="bg-amber-50/80 border-t border-amber-100 px-4 py-1.5 flex items-center justify-center gap-3 text-center text-xs text-amber-700">
+          {/* Disclaimer bar — deliberately kept solid and high-contrast, not
+              glassed/faded, regardless of the rest of the redesign: this is
+              a safety-relevant statement, not decorative chrome. */}
+          <div className="bg-amber-900 border-t border-amber-600/40 px-4 py-1.5 flex items-center justify-center gap-3 text-center text-xs text-amber-100">
             <span>⚕️ This AI provides general information only — not a substitute for professional medical advice.</span>
             {voiceStatus && (
-              <span className="flex items-center gap-1.5 text-teal-700 font-medium shrink-0">
+              <span className="flex items-center gap-1.5 text-teal-300 font-medium shrink-0">
                 <TalkingAvatar state={avatarState} level={avatarLevel} size={18} />
                 {voiceStatus}
               </span>
@@ -533,7 +560,7 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={stopSpeaking}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-100 hover:bg-red-200 text-red-700 font-semibold shrink-0 transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-500/25 hover:bg-red-500/35 text-red-100 font-semibold shrink-0 transition-colors"
               >
                 <Square className="w-3 h-3" fill="currentColor" />
                 Stop
@@ -542,13 +569,13 @@ export default function ChatPage() {
           </div>
 
           {voiceError && (
-            <div className="bg-red-50 border-t border-red-100 px-4 py-1.5 text-center text-xs text-red-700" role="alert">
+            <div className="bg-red-900 border-t border-red-600/40 px-4 py-1.5 text-center text-xs text-red-100" role="alert">
               {voiceError}
             </div>
           )}
 
           {/* Input area */}
-          <div className="bg-white/90 backdrop-blur-sm border-t border-slate-200/70 px-4 py-3">
+          <div className="glass-panel px-4 py-3">
             <div className="max-w-2xl mx-auto">
               <div className="flex gap-2 items-end">
                 <TalkingAvatar state={avatarState} level={avatarLevel} size={50} className="mb-0.5" />
@@ -564,7 +591,7 @@ export default function ChatPage() {
                   }}
                   placeholder="Describe your symptoms or ask a health question… (Enter to send)"
                   rows={1}
-                  className="flex-1 resize-none px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition max-h-32 scrollbar-thin"
+                  className="flex-1 resize-none px-4 py-2.5 bg-white/5 border border-white/15 rounded-xl text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:glow-ring-cyan focus:border-cyan-400/40 transition max-h-32 scrollbar-thin"
                   style={{ minHeight: "44px" }}
                 />
                 <div className="flex gap-1.5 shrink-0">
@@ -577,8 +604,8 @@ export default function ChatPage() {
                     aria-pressed={conversationMode}
                     className={`p-2.5 rounded-xl transition-colors shrink-0 ${
                       conversationMode
-                        ? "bg-teal-100 text-teal-700 hover:bg-teal-200"
-                        : "bg-slate-100 hover:bg-slate-200 text-slate-600 disabled:opacity-50"
+                        ? "bg-teal-500/20 text-teal-300 hover:bg-teal-500/30"
+                        : "bg-white/5 hover:bg-white/10 text-slate-300 disabled:opacity-50"
                     }`}
                   >
                     <Headphones className="w-4 h-4" />
@@ -595,7 +622,7 @@ export default function ChatPage() {
                   {streaming && (
                     <button
                       onClick={() => abortRef.current?.abort()}
-                      className="p-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 transition-colors"
+                      className="p-2.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-300 transition-colors"
                       title="Stop"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -604,7 +631,7 @@ export default function ChatPage() {
                   <button
                     onClick={() => sendMessage()}
                     disabled={!input.trim() || streaming}
-                    className="p-2.5 rounded-xl bg-gradient-to-br from-teal-500 to-teal-700 hover:from-teal-600 hover:to-teal-800 disabled:from-teal-200 disabled:to-teal-200 text-white shadow-sm shadow-teal-600/20 transition-all hover:scale-105 disabled:hover:scale-100 disabled:shadow-none"
+                    className="p-2.5 rounded-xl bg-gradient-to-br from-teal-600 to-teal-800 hover:from-teal-500 hover:to-teal-700 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-500 text-white shadow-[0_0_20px_rgba(45,212,191,0.3)] transition-all hover:scale-105 disabled:hover:scale-100 disabled:shadow-none"
                     title="Send"
                   >
                     <Send className="w-4 h-4" />
@@ -616,13 +643,13 @@ export default function ChatPage() {
               <div className="flex gap-2 mt-2 lg:hidden">
                 <button
                   onClick={handleNewChat}
-                  className="flex-1 text-xs text-slate-500 py-1.5 border border-slate-200 rounded-lg hover:border-slate-300 transition-colors"
+                  className="flex-1 text-xs text-slate-400 py-1.5 border border-white/10 rounded-lg hover:border-white/20 transition-colors"
                 >
                   New Chat
                 </button>
                 <button
                   onClick={handleSaveConversation}
-                  className="flex-1 text-xs text-slate-500 py-1.5 border border-slate-200 rounded-lg hover:border-slate-300 transition-colors"
+                  className="flex-1 text-xs text-slate-400 py-1.5 border border-white/10 rounded-lg hover:border-white/20 transition-colors"
                 >
                   {conversationSaved ? "✓ Saved" : "Save Chat"}
                 </button>

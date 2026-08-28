@@ -68,7 +68,14 @@ export interface MarkdownDoc {
   sections: { heading: string; body: string }[];
 }
 
-export function parseMarkdownDoc(raw: string): MarkdownDoc {
+export function parseMarkdownDoc(rawInput: string): MarkdownDoc {
+  // Normalize CRLF -> LF before frontmatter parsing. A file with Windows line
+  // endings (e.g. after `git mv` on a Windows checkout with autocrlf
+  // rewriting the working-tree copy) would otherwise silently fail the
+  // frontmatter regex below and fall back to "Untitled" / no source_url for
+  // every section in that file, with no error — same normalization lib/csv.ts
+  // already does for exactly this reason.
+  const raw = rawInput.replace(/\r\n/g, "\n");
   const fmMatch = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
   const meta: Record<string, string> = {};
   let body = raw;

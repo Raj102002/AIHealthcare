@@ -1,8 +1,71 @@
 @import "tailwindcss";
 
+/* AR/VR-inspired design tokens (Tailwind v4 CSS-first config — there is no
+   tailwind.config.* file in this project, so this @theme block is the only
+   place these tokens can live). "midnight" is the dark base surface scale;
+   teal/cyan/violet stay Tailwind's stock palette (no new color values
+   invented for those) but are assigned distinct roles below so an AI/system
+   moment (cyan), a user/action moment (teal), and the uncertainty/evidence
+   system (violet) each read as visually distinct rather than one accent
+   color doing every job. */
+@theme {
+  --color-midnight-950: #05060a;
+  --color-midnight-900: #0a0d16;
+  --color-midnight-800: #12172a;
+  --color-midnight-700: #1a2036;
+  --color-midnight-600: #242c48;
+}
+
+/* `inline` because these reference runtime CSS variables (next/font's
+   generated --font-inter / --font-space-grotesk, set via className in
+   app/layout.tsx) rather than static values — @theme alone only accepts
+   literals. This is what makes `font-body`/`font-display` real Tailwind
+   utility classes backed by the actual loaded font files, not a guessed
+   font-family string. */
+@theme inline {
+  --font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk), "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
 html,
 body {
   height: 100%;
+}
+
+/* Reusable glass-panel recipes (Tailwind v4 @utility — participates in the
+   normal utility layer/variant system, so hover:/focus: etc. still work on
+   top of these). Deliberately no border-radius here: pair with an explicit
+   rounded-* class at each call site instead of baking one in, so radius
+   stays controlled by Tailwind's normal cascade instead of a custom-utility
+   guess. */
+@utility glass-panel {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Higher-opacity backing for text-heavy surfaces (message bubbles) — glass
+   panels are see-through by design, which is wrong for a paragraph of
+   medical information someone needs to actually read. This trades some
+   transparency for WCAG-safe contrast against light text. */
+@utility glass-panel-strong {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.88), rgba(8, 11, 20, 0.82));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+@utility glow-ring-teal {
+  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.45), 0 0 24px rgba(45, 212, 191, 0.22);
+}
+@utility glow-ring-cyan {
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.45), 0 0 24px rgba(34, 211, 238, 0.22);
+}
+@utility glow-ring-violet {
+  box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.45), 0 0 24px rgba(167, 139, 250, 0.22);
 }
 
 .scrollbar-thin::-webkit-scrollbar {
@@ -43,6 +106,43 @@ body {
 }
 .animate-avatar-bob {
   animation: avatar-bob 3.4s ease-in-out infinite;
+}
+
+/* Ambient background glow breathing (decorative orbs only — never applied
+   to text-bearing surfaces, so it never competes with reading). */
+@keyframes glow-pulse {
+  0%, 100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+.animate-glow-pulse {
+  animation: glow-pulse 4s ease-in-out infinite;
+}
+
+/* Subtle hover lift for glass panels is done via plain Tailwind transition
+   utilities at each call site (`hover:-translate-y-0.5 transition-transform
+   duration-150`), not a dedicated keyframe — a two-state hover lift doesn't
+   need one. */
+
+/* EmergencyBanner.tsx referenced this class already; it was never defined
+   anywhere, so it was a silent no-op. A real emergency banner earns a
+   one-shot attention flash on mount, not an infinite distracting loop. */
+@keyframes pulse-once {
+  0% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 14px rgba(220, 38, 38, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+  }
+}
+.animate-pulse-once {
+  animation: pulse-once 1s ease-out 2;
 }
 
 /* Low-stimulation mode (lib/low-stim.ts sets this attribute on <html>).

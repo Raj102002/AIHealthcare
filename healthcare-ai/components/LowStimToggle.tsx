@@ -14,7 +14,7 @@ export default function LowStimToggle() {
       aria-label="Toggle low-stimulation mode: reduced motion, muted colors, larger tap targets"
       title={enabled ? "Turn off low-stimulation mode" : "Turn on low-stimulation mode"}
       className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg transition-colors ${
-        enabled ? "bg-teal-100 text-teal-700" : "text-slate-600 hover:text-teal-600 hover:bg-teal-50"
+        enabled ? "bg-teal-500/20 text-teal-300" : "text-slate-300 hover:text-cyan-300 hover:bg-white/5"
       }`}
     >
       <Feather className="w-4 h-4" />

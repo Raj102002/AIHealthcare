@@ -98,7 +98,7 @@ export default function ProvidersPage() {
           <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center">
             <Heart className="w-4 h-4 text-white" fill="white" />
           </div>
-          <span className="font-semibold text-slate-900">HealthAI</span>
+          <span className="font-semibold text-slate-900">ClearSignal</span>
         </div>
         <div className="flex items-center gap-1">
           <Link
@@ -181,6 +181,13 @@ export default function ProvidersPage() {
         </form>
 
         {error && <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-4">{error}</div>}
+
+        {providers && (
+          <p className="text-xs text-amber-700 bg-amber-50/80 border border-amber-100 rounded-xl px-3 py-2 mb-4">
+            Results are matched by specialty and location only — they are not ranked by suitability
+            for your situation, which is a clinical judgment this app doesn&apos;t make.
+          </p>
+        )}
 
         {providers && (
           <div className="mb-6">

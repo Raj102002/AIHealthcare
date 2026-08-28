@@ -36,7 +36,7 @@ graph TB
     end
 
     subgraph AI["AI Services"]
-        Groq["Groq API<br/>llama-3.3-70b-versatile (chat, rerank, rewrite, narrative)<br/>whisper-large-v3-turbo (STT)<br/>playai-tts (TTS)"]
+        Groq["Groq API<br/>openai/gpt-oss-120b (chat, rerank, narrative)<br/>openai/gpt-oss-20b (rewrite)<br/>whisper-large-v3-turbo (STT)<br/>playai-tts (TTS)"]
         Upstash["Upstash Vector<br/>dense retrieval, built-in embedding model"]
     end
 
@@ -114,7 +114,7 @@ sequenceDiagram
         C-->>U: static copy, X-Red-Flag header — no model call at all
     else no red flag
         C->>QR: rewriteQuery(history, message)
-        QR->>G: small rewrite call (llama-3.3-70b)
+        QR->>G: small rewrite call (openai/gpt-oss-20b)
         G-->>QR: standalone query
         C->>BM: bm25Search(expandedQuery, 20)
         C->>UV: dense query(expandedQuery, 20)
@@ -179,8 +179,8 @@ flowchart LR
 ```mermaid
 graph TB
     subgraph Ingestion["Ingestion — offline, npm run ingest, never on request path"]
-        MD["corpus/*.md"] --> Chunker["Recursive chunker<br/>~600 tok target, 100 tok overlap,<br/>never splits mid-sentence"]
-        CSV["data/*_long.csv"] --> TabChunker["Tabular chunk builder<br/>(county/state/race rollups)"]
+        MD["corpus/&lt;condition&gt;/*.md<br/>(lib/conditions/registry.ts)"] --> Chunker["Recursive chunker<br/>~600 tok target, 100 tok overlap,<br/>never splits mid-sentence"]
+        CSV["data/&lt;condition&gt;/*_long.csv"] --> TabChunker["Tabular chunk builder<br/>(county/state/race/age-group rollups)"]
         Chunker --> Hash["Content hash vs. manifest —<br/>skip unchanged, upsert by ID"]
         TabChunker --> Hash
         Hash --> UpstashUpsert["Upstash Vector upsert<br/>(built-in embedding model,<br/>text sent raw, no local embedding step)"]
@@ -193,13 +193,13 @@ graph TB
         VocabExpand --> Sparse["BM25 local search (top-20)"]
         Dense --> RRF["Reciprocal Rank Fusion"]
         Sparse --> RRF
-        RRF --> Rerank["Groq LLM rerank + min-relevance threshold<br/>(llama-3.3-70b — 8b tried first,<br/>proved unreliable at disease-mismatch judgment)"]
+        RRF --> Rerank["Groq LLM rerank + min-relevance threshold<br/>(openai/gpt-oss-120b today — llama-3.1-8b-instant tried first,<br/>proved unreliable at disease-mismatch judgment; later swapped again for account access)"]
         Rerank --> Context["Numbered context block, token-budget capped"]
     end
 
     subgraph Generation
         Context --> Prompt["System safety rules + context<br/>+ chat history + query"]
-        Prompt --> LLM["Groq llama-3.3-70b-versatile, streamed"]
+        Prompt --> LLM["Groq openai/gpt-oss-120b, streamed"]
         LLM --> CiteCheck["Citation number validity check"]
         CiteCheck --> Output["Answer + numbered sources"]
     end
@@ -214,7 +214,7 @@ graph TB
     end
 
     subgraph Agent["Real agentic loop — /api/journal-agent (new this cycle)"]
-        Question["Patient's free-text question<br/>+ journal arrays already fetched client-side"] --> AgentLLM["Groq llama-3.3-70b-versatile<br/>tools + tool_choice: auto"]
+        Question["Patient's free-text question<br/>+ journal arrays already fetched client-side"] --> AgentLLM["Groq openai/gpt-oss-120b<br/>tools + tool_choice: auto"]
         AgentLLM -->|tool_calls present| Dispatch["dispatchTool() —<br/>list_symptoms / get_severity_trend /<br/>get_function_impact / list_anchors /<br/>list_encounters / get_symptom_free_interval"]
         Dispatch -->|tool results appended as role:tool messages| AgentLLM
         AgentLLM -->|no tool_calls, or MAX_ITERATIONS=5 reached| AgentOut["Final answer —<br/>never diagnoses, never prescribes<br/>(system-prompt hard rule)"]
@@ -448,7 +448,7 @@ service commented out in `docker-compose.yml`.
 | **Next.js (App Router) on Netlify** | Inherited from the original project baseline; App Router route handlers map cleanly onto Netlify functions, and `@netlify/plugin-nextjs` handles the wiring. | Vercel (native Next.js host) — not used because the project's existing Netlify deployment and domain were already established before this build-phase cycle started. |
 | **Back4App (Parse Server / MongoDB)** | Already in place from the original baseline; gives ACL-enforced per-user data isolation out of the box (`new Parse.ACL(user)`), which is exactly the access-control shape this app needs, with zero custom auth code. | Supabase (Postgres + RLS) was evaluated per the assignment's suggested stack — it would give SQL joins and pgvector in one place, but migrating off Back4App mid-build-phase would touch every CRUD path (`lib/parse-client.ts`, `lib/journal-client.ts`) for no functional gain given ACLs already solve the actual requirement. Kept Back4App; see `plan.md` for the tradeoff written out in full. |
 | **Upstash Vector** (not Supabase/pgvector) | Back4App/MongoDB has no vector search. Upstash's built-in embedding models mean the app sends raw text and Upstash embeds server-side — no separate embeddings API key, and no local embedding model bundled into the serverless function (the *previous* version of this app shipped a 22MB ONNX model in the function, which this replaces). Free tier comfortably covers the ~3,200-chunk corpus. | pgvector (would need a Postgres instance not otherwise used); an in-memory index (would need to re-embed on every cold start, or ship the ONNX model again). |
-| **Groq (llama-3.3-70b-versatile)** | Already the project's LLM provider; fast inference, generous free tier for prototyping. Used for chat generation, query rewriting, reranking, and the handoff narrative. | Anthropic/OpenAI — not swapped in because Groq's speed matters for the streaming chat UX and the free tier suits build-phase iteration; the API routes are provider-agnostic enough to swap later if the free-tier limits (see `plan.md` cost section) become a blocker. |
+| **Groq (openai/gpt-oss-120b / openai/gpt-oss-20b — see lib/models.ts)** | Already the project's LLM provider; fast inference, generous free tier for prototyping. Used for chat generation, query rewriting, reranking, and the handoff narrative. | Anthropic/OpenAI — not swapped in because Groq's speed matters for the streaming chat UX and the free tier suits build-phase iteration; the API routes are provider-agnostic enough to swap later if the free-tier limits (see `plan.md` cost section) become a blocker. |
 | **BM25 in-memory (own implementation) + Upstash dense, fused with RRF** | Dense-only retrieval was the actual, measured failure mode of the previous version of this app (see `plan.md`'s technical feasibility notes) — exact terms and proper nouns (drug names, place names) get blurred by embeddings alone. BM25 catches what dense search misses, RRF combines both without needing to hand-tune a blend weight. | A hosted hybrid-search vector DB (e.g. Weaviate) would remove the need for a hand-rolled BM25 implementation, but was not adopted mid-cycle for the same reason Supabase wasn't: Upstash was already working, and swapping vector stores has no functional payoff without also swapping off Back4App-adjacent constraints. |
 | **Web Crypto API (client-side AES-GCM)** | No server dependency, no key-management service needed for prototyping; matches the explicit design requirement that journal notes must never be readable server-side. | A managed secrets/KMS-backed encryption service — deferred; the honest limitation (key lives only in `localStorage`, no cross-device recovery) is documented rather than hidden, see `docs/privacy.md`. |
 | **Parse User auth** (not a separate auth provider like Clerk/Auth0/Supabase Auth) | Comes bundled with Back4App; session tokens, password hashing, and `Parse.User.current()` session persistence are handled without extra integration work. | A dedicated auth provider would be redundant given Back4App already provides this, and would mean maintaining two identity systems for the ACL scoping to reference. |

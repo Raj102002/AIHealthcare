@@ -6,6 +6,7 @@ import { computeTestTiming, shouldSuggestRetest } from "@/lib/test-timing";
 import { checkRateLimit, clientKeyFrom } from "@/lib/rate-limit";
 import { withMetrics } from "@/lib/metrics";
 import { testContextRequestSchema, formatZodError } from "@/lib/validation";
+import { computeEvidenceTier } from "@/lib/evidence-tier";
 
 const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -49,6 +50,7 @@ export const POST = withMetrics("test-context", async (request: NextRequest) => 
       groq
     );
     const { block, sources } = buildContext(retrieved);
+    const evidenceTier = computeEvidenceTier(retrieved);
 
     if (block.length === 0) {
       return NextResponse.json({
@@ -58,6 +60,7 @@ export const POST = withMetrics("test-context", async (request: NextRequest) => 
           "The knowledge base doesn't have specific antibody-timing guidance available right now. Ask your clinician directly whether your test timing was adequate given when your symptoms began.",
         sources: [],
         contextAvailable: false,
+        evidenceTier,
       });
     }
 
@@ -101,6 +104,7 @@ export const POST = withMetrics("test-context", async (request: NextRequest) => 
       message: lines.join("\n\n"),
       sources,
       contextAvailable: true,
+      evidenceTier,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal server error";

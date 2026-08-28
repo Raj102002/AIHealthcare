@@ -18,7 +18,7 @@
 | Frontend | Next.js 16 (App Router, Turbopack), React 19, TypeScript |
 | Backend / DB | Back4App (Parse Server / MongoDB) — full CRUD, ACL-scoped per user |
 | Auth | Parse User (registration, login, session persistence) |
-| AI — LLM | Groq, `llama-3.3-70b-versatile` (chat, rerank, query rewrite, handoff narrative, journal agent tool-calling) |
+| AI — LLM | Groq, `openai/gpt-oss-120b` (chat, rerank, handoff narrative, journal agent tool-calling) + `openai/gpt-oss-20b` (query rewrite) — see `lib/models.ts`; swapped from `llama-3.3-70b-versatile` after a Groq account access change |
 | AI — Voice | Groq `whisper-large-v3-turbo` (STT), Groq `playai-tts` (TTS), browser `SpeechSynthesis` fallback |
 | Vector store | Upstash Vector (built-in embedding model, no separate embeddings key) |
 | Keyword search | Hand-rolled Okapi BM25, fused with dense results via Reciprocal Rank Fusion |
@@ -71,16 +71,19 @@ The problem this app addresses stays open regardless of vaccine approval.
 all in this pass.** The build spec (section 4) describes a condition-agnostic
 engine plus a per-illness "condition profile" config (`symptoms[]`, `exposures[]`,
 `redFlagRules[]`, `tests[]`, `differentials[]`, `corpusFilter`,
-`patternDetectors[]`) that would let ME/CFS, long COVID, fibromyalgia, and
-endometriosis plug into the same engine. **That config abstraction was not
-built.** Red-flag rules, the RAG corpus, and the lay-vocabulary mapping table are
-all hardcoded for Lyme disease throughout the codebase (`lib/red-flag.ts`,
-`corpus/*.md`, `lib/vocabulary-map.ts`). The architecture generalizes in
-principle — nothing here is Lyme-specific *by necessity* — but extracting the
-condition-specific pieces into that config shape is real, unbuilt work, not a
-detail. Pretending otherwise, or shipping other conditions without their own
-clinically-reviewed content, would be unsafe. See the spec's own build order
-(section 10) for what a real second condition profile would require.
+`patternDetectors[]`) that would let alpha-gal syndrome and other tickborne/
+invisible illnesses plug into the same engine. **A real, minimal slice of that
+config abstraction now exists** (`lib/conditions/registry.ts` +
+`lib/conditions/types.ts`): the corpus/data *paths* are condition-scoped
+(`corpus/<condition>/*.md`, `data/<condition>/*_long.csv`), and ingestion
+iterates the registry rather than hardcoding Lyme's paths. **What's still not
+condition-parametrized:** red-flag rules and the lay-vocabulary mapping table
+are still hardcoded standalone modules (`lib/red-flag.ts`,
+`lib/vocabulary-map.ts`), not per-condition config — those get pulled into the
+registry only when a second condition actually needs different rules, per the
+same rule below: never fake clinical content for a condition nobody
+researched. See `docs/privacy.md`-style honesty: this is a real step, not the
+whole thing.
 
 ### What's genuinely unverified — read before trusting any of this clinically
 
@@ -99,8 +102,15 @@ collected here so a reviewer doesn't have to go hunting:
 - **Contested-territory citations** (`/contested-territory`) — the IDSA/AAN/ACR
   and ILADS positions are accurately characterized in general terms, but specific
   guideline titles/URLs/years are marked `[needs citation]` and were not
-  independently verified (cdc.gov and similar sites block automated fetching in
-  this environment).
+  independently verified. Note: `cdc.gov`'s own HTML pages do return HTTP 403 to
+  automated fetches (confirmed live), but the Socrata API behind `data.cdc.gov`
+  itself is public and reachable (confirmed live this cycle, with real Lyme
+  disease dataset IDs found via its catalog API) — that channel just wasn't
+  used to re-verify the `data/lyme/` CSVs' exact row-level provenance in this
+  pass, so their source attribution stays the general CDC surveillance page,
+  not a specific dataset ID. The unverified citations above are guideline
+  documents, not `data.cdc.gov` datasets, so this doesn't close that gap
+  either way.
 - **Retention policy** (`docs/privacy.md`) — deletion works per-record; there is
   no automatic data-expiry policy yet, and chat/health-log notes are not
   encrypted client-side the way journal notes are.
@@ -121,8 +131,10 @@ layer on top of the same chat pipeline.
    built-in embedding model attached (e.g. `mixedbread-ai/mxbai-embed-large-v1`), and
    add its REST URL/token to `.env.local` as `UPSTASH_VECTOR_REST_URL` /
    `UPSTASH_VECTOR_REST_TOKEN`.
-3. Run `npm run ingest` to chunk `corpus/*.md` + `data/*_long.csv`, embed them via
-   Upstash, and write `data/corpus.json` (the local BM25 keyword index) and
+3. Run `npm run ingest` to chunk `corpus/<condition>/*.md` +
+   `data/<condition>/*_long.csv` (condition-scoped paths per
+   `lib/conditions/registry.ts` — Lyme is the only populated one today),
+   embed them via Upstash, and write `data/corpus.json` (the local BM25 keyword index) and
    `data/ingest-manifest.json` (idempotency tracking — safe to re-run any time the
    corpus changes; unchanged chunks are skipped). This runs offline, never at request
    time.

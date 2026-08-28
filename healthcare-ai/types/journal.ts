@@ -52,6 +52,10 @@ export interface ClinicalEncounter {
   toldWhat: string;
   ruledOut: string[];
   testsOrdered: string[];
+  // Patient-entered, not clinician-verified -- same status as toldWhat/
+  // ruledOut. Added so the clinician handoff document can list treatments
+  // the patient reports trying, per the v2 spec's handoff field list.
+  treatmentsTried: string[];
 }
 
 export const FUNCTION_DOMAIN_LABELS: Record<FunctionDomain, string> = {

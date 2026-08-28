@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Heart, MessageSquare, LogOut, Loader2, TestTube2 } from "lucide-react";
 import { getCurrentUser, logoutUser, initializeParse } from "@/lib/parse-client";
 import type { CitedSource } from "@/types/rag";
+import EvidenceTierBadge from "@/components/EvidenceTierBadge";
 
 interface TestContextResult {
   daysFromOnset: number;
@@ -13,6 +14,7 @@ interface TestContextResult {
   message: string;
   sources: CitedSource[];
   contextAvailable: boolean;
+  evidenceTier: string;
 }
 
 export default function TestContextPage() {
@@ -76,7 +78,7 @@ export default function TestContextPage() {
           <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center">
             <Heart className="w-4 h-4 text-white" fill="white" />
           </div>
-          <span className="font-semibold text-slate-900">HealthAI</span>
+          <span className="font-semibold text-slate-900">ClearSignal</span>
         </div>
         <div className="flex items-center gap-1">
           <Link
@@ -149,6 +151,9 @@ export default function TestContextPage() {
 
         {result && (
           <div className="mt-4 bg-white border border-slate-100 shadow-sm rounded-2xl p-5">
+            <div className="mb-2">
+              <EvidenceTierBadge tier={result.evidenceTier} />
+            </div>
             <p className="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">{result.message}</p>
             {result.sources.length > 0 && (
               <div className="mt-4 pt-4 border-t border-slate-100">

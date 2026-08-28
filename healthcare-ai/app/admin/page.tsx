@@ -85,7 +85,7 @@ export default function AdminMetricsPage() {
           <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center">
             <Heart className="w-4 h-4 text-white" fill="white" />
           </div>
-          <span className="font-semibold text-slate-900">HealthAI</span>
+          <span className="font-semibold text-slate-900">ClearSignal</span>
         </div>
         <div className="flex items-center gap-1">
           <Link

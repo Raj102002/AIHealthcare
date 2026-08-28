@@ -61,6 +61,39 @@ export const speakRequestSchema = z.object({
   text: z.string().min(1).max(2000),
 });
 
+export const healthInsightsRequestSchema = z.object({
+  logs: z
+    .array(
+      z.object({
+        symptoms: z.string().max(2000),
+        severity: z.enum(["low", "medium", "high"]),
+        notes: z.string().max(2000).optional(),
+        createdAt: z.string(),
+        vitals: z.record(z.string(), z.unknown()).optional(),
+      })
+    )
+    .max(200),
+  profile: z
+    .object({
+      age: z.number().min(0).max(150).optional(),
+      bloodType: z.string().max(10).optional(),
+      allergies: z.array(z.string()).optional(),
+      conditions: z.array(z.string()).optional(),
+      medications: z.array(z.string()).optional(),
+    })
+    .optional(),
+});
+
+export const navigatorRequestSchema = z.object({
+  question: z.string().min(1).max(MAX_MESSAGE_LENGTH),
+  location: z
+    .object({
+      state: z.string().max(50).optional(),
+      city: z.string().max(100).optional(),
+    })
+    .optional(),
+});
+
 const symptomEntrySchema = z.object({
   objectId: z.string().optional(),
   occurredAt: z.string(),
@@ -109,6 +142,7 @@ const clinicalEncounterSchema = z.object({
   toldWhat: z.string(),
   ruledOut: z.array(z.string()),
   testsOrdered: z.array(z.string()),
+  treatmentsTried: z.array(z.string()),
 });
 
 export const journalAgentRequestSchema = z.object({
