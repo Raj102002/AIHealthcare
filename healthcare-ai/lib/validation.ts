@@ -155,6 +155,20 @@ export const journalAgentRequestSchema = z.object({
   }),
 });
 
+export const chatInsightsRequestSchema = z.object({
+  conversations: z
+    .array(
+      z.object({
+        title: z.string().max(200),
+        createdAt: z.string(),
+        messages: z
+          .array(z.object({ role: z.string(), content: z.string().max(4000) }))
+          .max(200),
+      })
+    )
+    .max(100),
+});
+
 export function formatZodError(error: z.ZodError): string {
   return error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
 }

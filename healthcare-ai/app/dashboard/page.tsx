@@ -26,6 +26,7 @@ import {
 } from "@/lib/parse-client";
 import HealthLogForm from "@/components/HealthLogForm";
 import HealthInsights from "@/components/HealthInsights";
+import ChatLogInsights from "@/components/ChatLogInsights";
 import type { UserProfile } from "@/types/health";
 
 interface LogEntry {
@@ -42,6 +43,7 @@ interface ConvEntry {
   title: string;
   lastMessage: string;
   createdAt: string;
+  messages: { role: string; content: string }[];
 }
 
 const SEVERITY_STYLES = {
@@ -84,6 +86,7 @@ export default function DashboardPage() {
           title: obj.get("title") || "Conversation",
           lastMessage: obj.get("lastMessage") || "",
           createdAt: obj.get("createdAt")?.toISOString() || new Date().toISOString(),
+          messages: obj.get("messages") || [],
         }))
       );
     } catch (err) {
@@ -368,6 +371,11 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
+              {convs.length > 0 && (
+                <div className="p-4">
+                  <ChatLogInsights conversations={convs} />
+                </div>
+              )}
               {convs.length === 0 ? (
                 <div className="text-center py-12 text-slate-400">
                   <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-40" />
