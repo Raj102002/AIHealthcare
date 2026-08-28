@@ -44,16 +44,16 @@ export default function MicButton({ state, level, isSpeaking, disabled, onStart,
       title={label}
       aria-label={label}
       aria-pressed={state === "listening"}
-      className={`relative p-2.5 rounded-xl transition-colors shrink-0 ${
+      className={`relative p-2.5 rounded-lg border transition-colors shrink-0 ${
         state === "listening" || isSpeaking
-          ? "bg-red-500/20 hover:bg-red-500/30 text-red-300"
-          : "bg-white/5 hover:bg-white/10 text-slate-300 disabled:opacity-50"
+          ? "border-assay text-assay"
+          : "border-rule text-moss hover:text-bone hover:border-moss disabled:opacity-50"
       }`}
     >
       {state === "listening" && (
         <span
           aria-hidden="true"
-          className="absolute inset-0 rounded-xl bg-red-400 opacity-30"
+          className="absolute inset-0 rounded-lg bg-assay opacity-20"
           style={{ transform: `scale(${1 + level * 0.4})`, transition: "transform 100ms linear" }}
         />
       )}

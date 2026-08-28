@@ -18,12 +18,15 @@ import {
 } from "@/lib/parse-client";
 import { detectEmergency } from "@/lib/emergency-detector";
 import { extractCompleteSentences } from "@/lib/speech-sanitize";
-import EmergencyBanner from "@/components/EmergencyBanner";
-import ChatMessage from "@/components/ChatMessage";
+import EscalationCard from "@/components/ui/EscalationCard";
+import Turn from "@/components/ui/Turn";
+import AssayStrip from "@/components/ui/AssayStrip";
+import Composer from "@/components/ui/Composer";
+import SignalMark from "@/components/ui/SignalMark";
+import MonoLabel from "@/components/ui/MonoLabel";
 import HealthLogForm from "@/components/HealthLogForm";
 import UserProfilePanel from "@/components/UserProfilePanel";
 import MicButton from "@/components/MicButton";
-import TalkingAvatar, { type AvatarState } from "@/components/TalkingAvatar";
 import VoiceDisclosure from "@/components/VoiceDisclosure";
 import { useSpeechOutput } from "@/hooks/useSpeechOutput";
 import { useVoiceInput, type VoiceInputError } from "@/hooks/useVoiceInput";
@@ -60,7 +63,7 @@ export default function ChatPage() {
   const disclosureSeenRef = useRef(true);
   const wasSpeakingRef = useRef(false);
 
-  const { isSpeaking, level: speechLevel, beginStream, enqueueSentence, speak, stop: stopSpeaking, unlock } = useSpeechOutput();
+  const { isSpeaking, beginStream, enqueueSentence, speak, stop: stopSpeaking, unlock } = useSpeechOutput();
 
   const handleVoiceTranscript = useCallback((text: string) => {
     voiceTriggeredRef.current = true;
@@ -194,8 +197,12 @@ export default function ChatPage() {
       }
 
       const evidenceTier = res.headers.get("X-Evidence-Tier");
+      const evidenceScoreHeader = res.headers.get("X-Evidence-Score");
+      const evidenceScore = evidenceScoreHeader ? Number(evidenceScoreHeader) : undefined;
       if (evidenceTier) {
-        setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, evidenceTier } : m)));
+        setMessages((prev) =>
+          prev.map((m) => (m.id === assistantId ? { ...m, evidenceTier, evidenceScore } : m))
+        );
       }
 
       const sourcesHeader = res.headers.get("X-RAG-Sources");
@@ -334,8 +341,8 @@ export default function ChatPage() {
 
   if (!profile) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-teal-600" />
+      <div className="min-h-screen flex items-center justify-center bg-pitch">
+        <Loader2 className="w-6 h-6 animate-spin text-assay" />
       </div>
     );
   }
@@ -350,88 +357,55 @@ export default function ChatPage() {
     ? "Aura is thinking"
     : "";
 
-  const avatarState: AvatarState = isSpeaking
-    ? "speaking"
-    : voiceState === "listening"
-    ? "listening"
-    : voiceState === "transcribing" || streaming
-    ? "thinking"
-    : "idle";
-  const avatarLevel = isSpeaking ? speechLevel : voiceState === "listening" ? voiceLevel : 0;
+  const signalActive = isSpeaking || voiceState === "listening" || voiceState === "transcribing" || streaming;
   const isEmptyConversation = messages.length === 1 && messages[0].id === "welcome";
 
   return (
-    <div className="h-screen flex flex-col bg-midnight-950 text-slate-100">
+    <div className="h-screen flex flex-col bg-pitch text-bone">
       <div className="sr-only" role="status" aria-live="polite">
         {voiceStatus}
       </div>
 
-      {/* Decorative background depth — pure CSS, no assets, purely cosmetic.
-          Faint dot grid + three glowing orbs (teal/cyan/violet) breathing at
-          staggered offsets, respecting data-low-stim via the global
-          animation-duration override in globals.css. */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden -z-10" aria-hidden="true">
-        <div
-          className="absolute inset-0 opacity-[0.06]"
-          style={{ backgroundImage: "radial-gradient(circle, #2dd4bf 1px, transparent 1px)", backgroundSize: "36px 36px" }}
-        />
-        <div className="absolute -top-24 -left-24 w-[32rem] h-[32rem] rounded-full bg-teal-500/25 blur-3xl animate-glow-pulse" />
-        <div
-          className="absolute top-1/3 -right-40 w-[32rem] h-[32rem] rounded-full bg-cyan-500/20 blur-3xl animate-glow-pulse"
-          style={{ animationDelay: "1.3s" }}
-        />
-        <div
-          className="absolute -bottom-40 left-1/4 w-[32rem] h-[32rem] rounded-full bg-violet-500/15 blur-3xl animate-glow-pulse"
-          style={{ animationDelay: "2.6s" }}
-        />
-      </div>
-
-      {showEmergency && (
-        <EmergencyBanner onDismiss={() => setShowEmergency(false)} />
-      )}
+      {showEmergency && <EscalationCard onDismiss={() => setShowEmergency(false)} />}
       {showVoiceDisclosure && (
         <VoiceDisclosure onDismiss={() => setShowVoiceDisclosure(false)} />
       )}
 
       {/* Branding strip only -- destination nav and account actions live in
-          the global AppNav (components/AppNav.tsx) right above this. Having
-          both render their own copies of Journal/Test Timing/Dashboard/Sign
-          Out was the actual cause of the colliding-nav bug, not a wrapping
-          issue within either one individually. */}
-      <header className="glass-panel px-4 py-2 flex items-center shrink-0 z-10">
+          the global AppNav (components/AppNav.tsx) right above this. */}
+      <header className="bg-slate border-b border-rule px-4 py-2.5 flex items-center shrink-0">
         <div className="flex items-center gap-2.5">
-          <TalkingAvatar state={avatarState} level={avatarLevel} size={36} />
+          <SignalMark size={22} active={signalActive} />
           <div className="leading-tight">
-            <span className="font-display font-semibold text-slate-100 tracking-tight">ClearSignal</span>
-            <p className="text-[11px] text-slate-400 -mt-0.5">Aura, your health companion</p>
+            <span className="font-display font-semibold text-bone tracking-tight">ClearSignal</span>
+            <p className="text-[11px] text-moss -mt-0.5">Aura, your health companion</p>
           </div>
         </div>
       </header>
 
       {/* Main layout */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar — a column of floating glass widgets rather than a flush
-            bordered panel, matching the "floating AR dashboard" direction. */}
-        <aside className="hidden lg:flex flex-col w-72 overflow-y-auto scrollbar-thin p-3 gap-3 shrink-0">
+        {/* Sidebar */}
+        <aside className="hidden lg:flex flex-col w-72 overflow-y-auto scrollbar-thin p-3 gap-3 shrink-0 border-r border-rule">
           {(profile.email || profile.username) && (
-            <div className="glass-panel rounded-2xl p-3.5">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+            <div className="bg-slate border border-rule rounded-lg p-3.5">
+              <MonoLabel className="text-moss mb-1.5" as="p">
                 Signed in as
-              </p>
-              <p className="text-sm font-medium text-slate-100 truncate">{profile.email || profile.username}</p>
+              </MonoLabel>
+              <p className="text-sm font-medium text-bone truncate">{profile.email || profile.username}</p>
             </div>
           )}
 
-          <div className="space-y-2 glass-panel rounded-2xl p-3">
+          <div className="space-y-1.5 bg-slate border border-rule rounded-lg p-3">
             <button
               onClick={handleSaveConversation}
-              className="w-full flex items-center justify-center gap-2 text-sm text-slate-300 hover:text-teal-300 py-2 rounded-xl hover:bg-white/5 transition-colors"
+              className="w-full flex items-center justify-center gap-2 text-sm text-moss hover:text-bone py-2 rounded-md hover:bg-rule transition-colors"
             >
               {conversationSaved ? "✓ Saved!" : "Save Conversation"}
             </button>
             <button
               onClick={handleNewChat}
-              className="w-full flex items-center justify-center gap-2 text-sm text-slate-300 hover:text-slate-100 py-2 rounded-xl hover:bg-white/5 transition-colors"
+              className="w-full flex items-center justify-center gap-2 text-sm text-moss hover:text-bone py-2 rounded-md hover:bg-rule transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               New Chat
@@ -448,175 +422,167 @@ export default function ChatPage() {
           <HealthLogForm prefillSymptoms={lastSymptoms} />
         </aside>
 
-        {/* Chat area */}
-        <main className="flex flex-col flex-1 overflow-hidden">
-          <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-4 flex flex-col">
-            <div
-              className={`max-w-2xl mx-auto w-full ${isEmptyConversation ? "flex-1 flex flex-col justify-center" : ""}`}
-            >
-              {isEmptyConversation && (
-                <div className="flex flex-col items-center text-center pb-4">
-                  <div className="relative">
-                    <div className="absolute inset-0 rounded-full bg-teal-400/25 blur-2xl animate-glow-pulse" aria-hidden="true" />
-                    <TalkingAvatar state={avatarState} level={avatarLevel} size={104} />
+        {/* Chat area -- AssayStrip rides alongside the transcript column,
+            not the sidebar or the page as a whole. */}
+        <main className="flex flex-1 overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-4 flex">
+              <AssayStrip messages={messages} />
+              <div
+                className={`flex-1 max-w-2xl mx-auto w-full ${isEmptyConversation ? "flex flex-col justify-center" : ""}`}
+              >
+                {isEmptyConversation && (
+                  <div className="flex flex-col items-center text-center pb-4">
+                    <SignalMark size={56} active={signalActive} />
+                    <h1 className="mt-6 font-display text-2xl sm:text-3xl font-semibold text-bone tracking-tight">
+                      Navigate complex symptoms with clarity
+                    </h1>
+                    <p className="mt-2.5 max-w-md text-sm text-moss">
+                      I&apos;m Aura, ClearSignal&apos;s AI companion — ask about symptoms, exposure, or testing, and
+                      I&apos;ll ground every answer in real CDC data, with sources and an honest confidence level.
+                    </p>
+                    <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-2 w-full max-w-xl">
+                      {[
+                        "What does a negative Lyme test really mean?",
+                        "How do I log a symptom?",
+                        "What should I ask my doctor?",
+                      ].map((suggestion) => (
+                        <button
+                          key={suggestion}
+                          type="button"
+                          onClick={() => sendMessage(suggestion)}
+                          className="border border-rule rounded-lg px-3.5 py-2.5 text-xs text-bone hover:border-assay transition-colors text-center"
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <h1 className="mt-6 font-display text-2xl sm:text-3xl font-semibold text-slate-50 tracking-tight">
-                    Navigate complex symptoms with clarity
-                  </h1>
-                  <p className="mt-2.5 max-w-md text-sm text-slate-400">
-                    I&apos;m Aura, ClearSignal&apos;s AI companion — ask about symptoms, exposure, or testing, and
-                    I&apos;ll ground every answer in real CDC data, with sources and an honest confidence level.
-                  </p>
-                  <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-2 w-full max-w-xl">
-                    {[
-                      "What does a negative Lyme test really mean?",
-                      "How do I log a symptom?",
-                      "What should I ask my doctor?",
-                    ].map((suggestion) => (
-                      <button
-                        key={suggestion}
-                        type="button"
-                        onClick={() => sendMessage(suggestion)}
-                        className="glass-panel rounded-xl px-3.5 py-2.5 text-xs text-slate-200 hover:text-teal-300 hover:glow-ring-teal transition-all text-center"
-                      >
-                        {suggestion}
-                      </button>
-                    ))}
+                )}
+                {messages
+                  .filter((msg) => msg.id !== "welcome")
+                  .map((msg) => (
+                    <Turn
+                      key={msg.id}
+                      message={msg}
+                      onSpeak={(text) => speak(text, profile?.preferredLanguage)}
+                    />
+                  ))}
+                {streaming && messages[messages.length - 1]?.content === "" && (
+                  <div className="mb-8 pl-4 border-l-2 border-assay flex items-center gap-2">
+                    <SignalMark size={16} active />
+                    <MonoLabel className="text-moss">Aura is thinking</MonoLabel>
                   </div>
-                </div>
-              )}
-              {messages
-                .filter((msg) => msg.id !== "welcome")
-                .map((msg) => (
-                  <ChatMessage
-                    key={msg.id}
-                    message={msg}
-                    onSpeak={(text) => speak(text, profile?.preferredLanguage)}
-                  />
-                ))}
-              {streaming && messages[messages.length - 1]?.content === "" && (
-                <div className="flex gap-3 mb-4 items-center">
-                  <TalkingAvatar state="thinking" size={32} />
-                  <div className="glass-panel-strong rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-slate-400">
-                    Aura is thinking...
-                  </div>
-                </div>
-              )}
-              <div ref={bottomRef} />
+                )}
+                <div ref={bottomRef} />
+              </div>
             </div>
-          </div>
 
-          {/* Voice status — only rendered while actually relevant, not a
-              permanent bar. The one standing disclaimer line lives once,
-              under the composer (below), instead of duplicated here too. */}
-          {voiceStatus && (
-            <div className="glass-panel border-x-0 px-4 py-1.5 flex items-center justify-center gap-3 text-xs">
-              <span className="flex items-center gap-1.5 text-teal-300 font-medium shrink-0">
-                <TalkingAvatar state={avatarState} level={avatarLevel} size={18} />
-                {voiceStatus}
-              </span>
-              {isSpeaking && (
-                <button
-                  type="button"
-                  onClick={stopSpeaking}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-500/25 hover:bg-red-500/35 text-red-100 font-semibold shrink-0 transition-colors"
-                >
-                  <Square className="w-3 h-3" fill="currentColor" />
-                  Stop
-                </button>
-              )}
-            </div>
-          )}
-
-          {voiceError && (
-            <div className="bg-red-900 border-t border-red-600/40 px-4 py-1.5 text-center text-xs text-red-100" role="alert">
-              {voiceError}
-            </div>
-          )}
-
-          {/* Input area */}
-          <div className="glass-panel px-4 py-3">
-            <div className="max-w-2xl mx-auto">
-              <div className="flex gap-2 items-end">
-                <TalkingAvatar state={avatarState} level={avatarLevel} size={50} className="mb-0.5" />
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      sendMessage();
-                    }
-                  }}
-                  placeholder="Describe your symptoms or ask a health question… (Enter to send)"
-                  rows={1}
-                  className="flex-1 resize-none px-4 py-2.5 bg-white/5 border border-white/15 rounded-xl text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:glow-ring-cyan focus:border-cyan-400/40 transition max-h-32 scrollbar-thin"
-                  style={{ minHeight: "44px" }}
-                />
-                <div className="flex gap-1.5 shrink-0">
+            {/* Voice status — only rendered while actually relevant, not a
+                permanent bar. The one standing disclaimer line lives once,
+                under the composer (below), instead of duplicated here too. */}
+            {voiceStatus && (
+              <div className="bg-slate border-t border-rule px-4 py-1.5 flex items-center justify-center gap-3 text-xs">
+                <span className="flex items-center gap-1.5 text-assay font-medium shrink-0">
+                  <SignalMark size={14} active />
+                  {voiceStatus}
+                </span>
+                {isSpeaking && (
                   <button
                     type="button"
-                    onClick={handleToggleConversationMode}
-                    disabled={streaming}
-                    title={conversationMode ? "Turn off hands-free conversation mode" : "Turn on hands-free conversation mode"}
-                    aria-label="Toggle hands-free conversation mode"
-                    aria-pressed={conversationMode}
-                    className={`p-2.5 rounded-xl transition-colors shrink-0 ${
-                      conversationMode
-                        ? "bg-teal-500/20 text-teal-300 hover:bg-teal-500/30"
-                        : "bg-white/5 hover:bg-white/10 text-slate-300 disabled:opacity-50"
-                    }`}
+                    onClick={stopSpeaking}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-flare text-pitch font-semibold shrink-0 hover:opacity-85 transition-opacity"
                   >
-                    <Headphones className="w-4 h-4" />
+                    <Square className="w-3 h-3" fill="currentColor" />
+                    Stop
                   </button>
-                  <MicButton
-                    state={voiceState}
-                    level={voiceLevel}
-                    isSpeaking={isSpeaking}
-                    onStart={handleMicStart}
-                    onStop={stopVoice}
-                    onBargeIn={handleBargeIn}
-                    disabled={streaming}
-                  />
-                  {streaming && (
-                    <button
-                      onClick={() => abortRef.current?.abort()}
-                      className="p-2.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-300 transition-colors"
-                      title="Stop"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
+                )}
+              </div>
+            )}
+
+            {voiceError && (
+              <div className="bg-slate border-t border-flare/40 px-4 py-1.5 text-center text-xs text-flare" role="alert">
+                {voiceError}
+              </div>
+            )}
+
+            {/* Input area */}
+            <div className="bg-slate border-t border-rule px-4 py-3">
+              <div className="max-w-2xl mx-auto">
+                <Composer
+                  value={input}
+                  onChange={setInput}
+                  onSend={sendMessage}
+                  placeholder="Describe your symptoms or ask a health question… (Enter to send)"
+                  disabled={streaming}
+                  inputRef={inputRef}
+                  leading={<SignalMark size={28} active={signalActive} className="mb-1" />}
+                  trailing={
+                    <div className="flex gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleToggleConversationMode}
+                        disabled={streaming}
+                        title={conversationMode ? "Turn off hands-free conversation mode" : "Turn on hands-free conversation mode"}
+                        aria-label="Toggle hands-free conversation mode"
+                        aria-pressed={conversationMode}
+                        className={`p-2.5 rounded-lg border transition-colors shrink-0 ${
+                          conversationMode
+                            ? "border-assay text-assay"
+                            : "border-rule text-moss hover:text-bone hover:border-moss disabled:opacity-50"
+                        }`}
+                      >
+                        <Headphones className="w-4 h-4" />
+                      </button>
+                      <MicButton
+                        state={voiceState}
+                        level={voiceLevel}
+                        isSpeaking={isSpeaking}
+                        onStart={handleMicStart}
+                        onStop={stopVoice}
+                        onBargeIn={handleBargeIn}
+                        disabled={streaming}
+                      />
+                      {streaming && (
+                        <button
+                          onClick={() => abortRef.current?.abort()}
+                          className="p-2.5 rounded-lg border border-rule text-moss hover:text-flare hover:border-flare transition-colors"
+                          title="Stop"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => sendMessage()}
+                        disabled={!input.trim() || streaming}
+                        className="p-2.5 rounded-lg bg-assay text-pitch disabled:bg-rule disabled:text-moss transition-colors"
+                        title="Send"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    </div>
+                  }
+                />
+
+                <p className="text-center text-[11px] text-moss mt-2.5">
+                  ⚕️ General information only — not a substitute for professional medical advice.
+                </p>
+
+                {/* Mobile quick actions */}
+                <div className="flex gap-2 mt-2 lg:hidden">
                   <button
-                    onClick={() => sendMessage()}
-                    disabled={!input.trim() || streaming}
-                    className="p-2.5 rounded-xl bg-gradient-to-br from-teal-600 to-teal-800 hover:from-teal-500 hover:to-teal-700 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-500 text-white shadow-[0_0_20px_rgba(45,212,191,0.3)] transition-all hover:scale-105 disabled:hover:scale-100 disabled:shadow-none"
-                    title="Send"
+                    onClick={handleNewChat}
+                    className="flex-1 text-xs text-moss py-1.5 border border-rule rounded-md hover:border-moss transition-colors"
                   >
-                    <Send className="w-4 h-4" />
+                    New Chat
+                  </button>
+                  <button
+                    onClick={handleSaveConversation}
+                    className="flex-1 text-xs text-moss py-1.5 border border-rule rounded-md hover:border-moss transition-colors"
+                  >
+                    {conversationSaved ? "✓ Saved" : "Save Chat"}
                   </button>
                 </div>
-              </div>
-
-              <p className="text-center text-[11px] text-slate-500 mt-2.5">
-                ⚕️ General information only — not a substitute for professional medical advice.
-              </p>
-
-              {/* Mobile quick actions */}
-              <div className="flex gap-2 mt-2 lg:hidden">
-                <button
-                  onClick={handleNewChat}
-                  className="flex-1 text-xs text-slate-400 py-1.5 border border-white/10 rounded-lg hover:border-white/20 transition-colors"
-                >
-                  New Chat
-                </button>
-                <button
-                  onClick={handleSaveConversation}
-                  className="flex-1 text-xs text-slate-400 py-1.5 border border-white/10 rounded-lg hover:border-white/20 transition-colors"
-                >
-                  {conversationSaved ? "✓ Saved" : "Save Chat"}
-                </button>
               </div>
             </div>
           </div>

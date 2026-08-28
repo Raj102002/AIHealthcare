@@ -27,6 +27,18 @@ export function computeEvidenceTier(chunks: RetrievedChunk[]): EvidenceTier {
   return "limited";
 }
 
+// The raw number computeEvidenceTier buckets, exposed separately for the
+// AssayStrip UI component (components/ui/AssayStrip.tsx), which sizes/
+// opacity-weights a band per turn by actual retrieval confidence rather than
+// just the 5-way tier. Same [0, 10] range as RetrievedChunk.score in
+// lib/rerank.ts -- 0 means no chunks cleared MIN_RELEVANCE_SCORE, not "low
+// confidence answer" (there's no answer-quality signal here, only
+// retrieval-relevance).
+export function computeEvidenceScore(chunks: RetrievedChunk[]): number {
+  if (chunks.length === 0) return 0;
+  return Math.max(...chunks.map((c) => c.score));
+}
+
 export const EVIDENCE_TIER_LABELS: Record<EvidenceTier, string> = {
   strong: "Strong source support",
   moderate: "Moderate source support",

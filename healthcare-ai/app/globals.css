@@ -1,71 +1,37 @@
 @import "tailwindcss";
 
-/* AR/VR-inspired design tokens (Tailwind v4 CSS-first config — there is no
-   tailwind.config.* file in this project, so this @theme block is the only
-   place these tokens can live). "midnight" is the dark base surface scale;
-   teal/cyan/violet stay Tailwind's stock palette (no new color values
-   invented for those) but are assigned distinct roles below so an AI/system
-   moment (cyan), a user/action moment (teal), and the uncertainty/evidence
-   system (violet) each read as visually distinct rather than one accent
-   color doing every job. */
+/* Design tokens (Tailwind v4 CSS-first config — no tailwind.config file
+   exists in this project, so this @theme block is the only place tokens can
+   live; Tailwind auto-generates bg-, text-, and border-prefixed utilities
+   for every --color- key below, so e.g. "assay" needs no separate utility
+   class). This replaces the previous "midnight" dark-glassmorphism palette
+   entirely -- no old color/font tokens remain, nothing here falls back to
+   Tailwind's stock teal/slate scale or Inter-only typography. */
 @theme {
-  --color-midnight-950: #05060a;
-  --color-midnight-900: #0a0d16;
-  --color-midnight-800: #12172a;
-  --color-midnight-700: #1a2036;
-  --color-midnight-600: #242c48;
+  --color-pitch: #0c100f;
+  --color-slate: #141a18;
+  --color-rule: rgba(228, 232, 225, 0.12);
+  --color-bone: #e4e8e1;
+  --color-moss: #8a9e8f;
+  --color-assay: #35c0ae;
+  --color-flare: #e0687a;
 }
 
 /* `inline` because these reference runtime CSS variables (next/font's
-   generated --font-inter / --font-space-grotesk, set via className in
-   app/layout.tsx) rather than static values — @theme alone only accepts
-   literals. This is what makes `font-body`/`font-display` real Tailwind
-   utility classes backed by the actual loaded font files, not a guessed
-   font-family string. */
+   generated --font-bricolage / --font-newsreader / --font-plex-mono, set via
+   className in app/layout.tsx) rather than static values -- @theme alone
+   only accepts literals. --font-mono overrides Tailwind's own built-in
+   monospace stack so `font-mono` means IBM Plex Mono everywhere, not the
+   framework default. */
 @theme inline {
-  --font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-space-grotesk), "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-newsreader), Georgia, serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
 }
 
 html,
 body {
   height: 100%;
-}
-
-/* Reusable glass-panel recipes (Tailwind v4 @utility — participates in the
-   normal utility layer/variant system, so hover:/focus: etc. still work on
-   top of these). Deliberately no border-radius here: pair with an explicit
-   rounded-* class at each call site instead of baking one in, so radius
-   stays controlled by Tailwind's normal cascade instead of a custom-utility
-   guess. */
-@utility glass-panel {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-/* Higher-opacity backing for text-heavy surfaces (message bubbles) — glass
-   panels are see-through by design, which is wrong for a paragraph of
-   medical information someone needs to actually read. This trades some
-   transparency for WCAG-safe contrast against light text. */
-@utility glass-panel-strong {
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.88), rgba(8, 11, 20, 0.82));
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
-}
-
-@utility glow-ring-teal {
-  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.45), 0 0 24px rgba(45, 212, 191, 0.22);
-}
-@utility glow-ring-cyan {
-  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.45), 0 0 24px rgba(34, 211, 238, 0.22);
-}
-@utility glow-ring-violet {
-  box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.45), 0 0 24px rgba(167, 139, 250, 0.22);
 }
 
 .scrollbar-thin::-webkit-scrollbar {
@@ -75,11 +41,11 @@ body {
   background: transparent;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: var(--color-rule);
   border-radius: 4px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: var(--color-moss);
 }
 
 @keyframes message-in {
@@ -96,58 +62,29 @@ body {
   animation: message-in 220ms ease-out;
 }
 
-@keyframes avatar-bob {
-  0%, 100% {
-    transform: translateY(0) rotate(0deg);
-  }
-  50% {
-    transform: translateY(-2px) rotate(-1.5deg);
-  }
-}
-.animate-avatar-bob {
-  animation: avatar-bob 3.4s ease-in-out infinite;
-}
-
-/* Ambient background glow breathing (decorative orbs only — never applied
-   to text-bearing surfaces, so it never competes with reading). */
-@keyframes glow-pulse {
-  0%, 100% {
-    opacity: 0.55;
-  }
-  50% {
-    opacity: 0.9;
-  }
-}
-.animate-glow-pulse {
-  animation: glow-pulse 4s ease-in-out infinite;
-}
-
-/* Subtle hover lift for glass panels is done via plain Tailwind transition
-   utilities at each call site (`hover:-translate-y-0.5 transition-transform
-   duration-150`), not a dedicated keyframe — a two-state hover lift doesn't
-   need one. */
-
-/* EmergencyBanner.tsx referenced this class already; it was never defined
-   anywhere, so it was a silent no-op. A real emergency banner earns a
-   one-shot attention flash on mount, not an infinite distracting loop. */
+/* components/ui/EscalationCard.tsx's one-shot attention flash on mount --
+   rgba here is #e0687a (--color-flare) since CSS custom properties can't be
+   used inside rgba()'s alpha slot directly. */
 @keyframes pulse-once {
   0% {
-    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.6);
+    box-shadow: 0 0 0 0 rgba(224, 104, 122, 0.6);
   }
   70% {
-    box-shadow: 0 0 0 14px rgba(220, 38, 38, 0);
+    box-shadow: 0 0 0 14px rgba(224, 104, 122, 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+    box-shadow: 0 0 0 0 rgba(224, 104, 122, 0);
   }
 }
 .animate-pulse-once {
   animation: pulse-once 1s ease-out 2;
 }
 
-/* Low-stimulation mode (lib/low-stim.ts sets this attribute on <html>).
-   Single global rule set rather than per-component overrides, deliberately —
-   this needs to apply everywhere uniformly, including pages added later. */
+/* Two independent "less motion" signals, both honored: this app's own
+   manual low-stim toggle (data-low-stim, set by lib/low-stim.ts), and the
+   OS-level prefers-reduced-motion setting, which the previous pass didn't
+   check at all. Same rule set for both, kept as two blocks rather than one
+   combined selector so each stays independently readable/removable. */
 html[data-low-stim="true"] * {
   animation-duration: 0.001ms !important;
   animation-iteration-count: 1 !important;
@@ -166,4 +103,15 @@ html[data-low-stim="true"] input,
 html[data-low-stim="true"] select,
 html[data-low-stim="true"] textarea {
   min-height: 44px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

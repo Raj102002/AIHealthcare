@@ -13,7 +13,7 @@ import { chatRequestSchema, formatZodError } from "@/lib/validation";
 import { flagPromptInjection } from "@/lib/prompt-injection";
 import { logger } from "@/lib/logger";
 import { GROQ_GENERATION_MODEL, GROQ_REASONING_EFFORT } from "@/lib/models";
-import { computeEvidenceTier } from "@/lib/evidence-tier";
+import { computeEvidenceTier, computeEvidenceScore } from "@/lib/evidence-tier";
 
 const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -31,6 +31,10 @@ function redFlagResponse(copy: string, severity: string, evidenceTier: string): 
       "X-Content-Type-Options": "nosniff",
       "X-Red-Flag": severity,
       "X-Evidence-Tier": evidenceTier,
+      // No retrieval ran on this path (red-flag short-circuits before it),
+      // so there's no real score to report -- 0 here means "not applicable,"
+      // same as the empty-retrieval case, not "zero confidence in an answer."
+      "X-Evidence-Score": "0",
     },
   });
 }
@@ -103,6 +107,7 @@ export async function POST(request: NextRequest) {
     const rewrittenQuery = await rewriteQuery(history, lastMessage.content, groq);
     const retrieved = await retrieve(rewrittenQuery, groq);
     const evidenceTier = computeEvidenceTier(retrieved);
+    const evidenceScore = computeEvidenceScore(retrieved);
     const { sources, chunks } = buildContext(retrieved);
 
     // Context goes in as its own system turn, and the user's message is sent
@@ -110,7 +115,7 @@ export async function POST(request: NextRequest) {
     // "RETRIEVED CONTEXT:" to the user turn is what previously made the model
     // say things like "the CDC materials you provided", since from its view the
     // human handed it documents in that same turn. The `sources` list below is
-    // still shown to the user as its own UI element (ChatMessage.tsx) — this
+    // still shown to the user as its own UI element (components/ui/Turn.tsx) — this
     // only stops the model from narrating its own retrieval mechanics in prose.
     const contextBlock = buildContextBlock(chunks.map((c) => ({ text: c.text, source: c.metadata.source_name })));
 
@@ -163,6 +168,7 @@ export async function POST(request: NextRequest) {
       "X-Content-Type-Options": "nosniff",
       "X-RAG-Sources": Buffer.from(JSON.stringify(sources)).toString("base64"),
       "X-Evidence-Tier": evidenceTier,
+      "X-Evidence-Score": String(evidenceScore),
     };
     if (coinfectionNotes.length > 0) {
       headers["X-Coinfection-Notes"] = Buffer.from(JSON.stringify(coinfectionNotes)).toString("base64");

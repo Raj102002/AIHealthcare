@@ -22,9 +22,7 @@ import LowStimToggle from "@/components/LowStimToggle";
 
 // Primary row capped at 5 -- the app's actual golden path, not every route
 // that exists. Everything else lives behind "More" instead of competing for
-// space in the always-visible row. (Previous version tried to fit all 8+
-// destinations into one row constrained to max-w-4xl regardless of viewport
-// width -- that's what was overflowing/wrapping into a second, colliding row.)
+// space in the always-visible row.
 const PRIMARY = [
   { href: "/chat", label: "Ask Aura", icon: MessageSquare },
   { href: "/journal", label: "Symptoms", icon: Activity },
@@ -95,7 +93,7 @@ export default function AppNav() {
   const moreActive = MORE.some((m) => isActive(pathname, m.href));
 
   return (
-    <nav className="glass-panel shrink-0">
+    <nav className="bg-slate border-b border-rule shrink-0">
       <div className="flex items-center gap-1 px-3 flex-nowrap">
         {PRIMARY.map(({ href, label, icon: Icon }) => {
           const active = isActive(pathname, href);
@@ -103,13 +101,13 @@ export default function AppNav() {
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-1.5 text-xs whitespace-nowrap px-2.5 py-2.5 border-b-2 transition-colors ${
+              className={`flex items-center gap-1.5 text-xs whitespace-nowrap px-2.5 py-2.5 border-b-2 transition-colors focus-visible:outline-2 focus-visible:outline-assay focus-visible:outline-offset-2 ${
                 active
-                  ? "border-teal-400 text-white"
-                  : "border-transparent text-slate-400 hover:text-slate-100 hover:border-slate-600"
+                  ? "border-assay text-bone"
+                  : "border-transparent text-moss hover:text-bone hover:border-moss"
               }`}
             >
-              <Icon className={`w-3.5 h-3.5 ${active ? "text-teal-400 drop-shadow-[0_0_6px_rgba(45,212,191,0.6)]" : ""}`} />
+              <Icon className={`w-3.5 h-3.5 ${active ? "text-assay" : ""}`} />
               {label}
             </Link>
           );
@@ -121,10 +119,10 @@ export default function AppNav() {
             onClick={() => setMoreOpen((v) => !v)}
             aria-haspopup="menu"
             aria-expanded={moreOpen}
-            className={`flex items-center gap-1 text-xs whitespace-nowrap px-2.5 py-2.5 border-b-2 transition-colors ${
+            className={`flex items-center gap-1 text-xs whitespace-nowrap px-2.5 py-2.5 border-b-2 transition-colors focus-visible:outline-2 focus-visible:outline-assay focus-visible:outline-offset-2 ${
               moreActive || moreOpen
-                ? "border-teal-400 text-white"
-                : "border-transparent text-slate-400 hover:text-slate-100 hover:border-slate-600"
+                ? "border-assay text-bone"
+                : "border-transparent text-moss hover:text-bone hover:border-moss"
             }`}
           >
             More
@@ -133,7 +131,7 @@ export default function AppNav() {
           {moreOpen && (
             <div
               role="menu"
-              className="glass-panel-strong absolute left-0 top-full mt-1 w-56 rounded-xl py-1.5 z-40"
+              className="bg-slate border border-rule absolute left-0 top-full mt-1 w-56 rounded-xl py-1.5 shadow-lg shadow-black/40 z-40"
             >
               {MORE.map(({ href, label, icon: Icon }) => {
                 const active = isActive(pathname, href);
@@ -143,7 +141,7 @@ export default function AppNav() {
                     href={href}
                     role="menuitem"
                     className={`flex items-center gap-2 text-xs px-3 py-2 transition-colors ${
-                      active ? "text-teal-300" : "text-slate-300 hover:text-slate-100 hover:bg-white/5"
+                      active ? "text-assay" : "text-moss hover:text-bone hover:bg-rule"
                     }`}
                   >
                     <Icon className="w-3.5 h-3.5 shrink-0" />
@@ -157,12 +155,12 @@ export default function AppNav() {
 
         {/* Right-aligned cluster, visually separated from the destination
             links -- these are account/preference actions, not sections. */}
-        <div className="ml-auto flex items-center gap-1 pl-2 border-l border-white/10 my-1.5">
+        <div className="ml-auto flex items-center gap-1 pl-2 border-l border-rule my-1.5">
           <LowStimToggle />
           <button
             type="button"
             onClick={handleLogout}
-            className="flex items-center gap-1.5 text-xs whitespace-nowrap px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            className="flex items-center gap-1.5 text-xs whitespace-nowrap px-2.5 py-1.5 rounded-lg text-moss hover:text-bone hover:bg-rule transition-colors"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span className="hidden md:inline">Sign Out</span>

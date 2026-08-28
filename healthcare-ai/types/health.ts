@@ -13,6 +13,7 @@ export interface Message {
   sources?: import("./rag").CitedSource[];
   coinfectionNotes?: CoinfectionNote[];
   evidenceTier?: string;
+  evidenceScore?: number;
 }
 
 export interface Vitals {
