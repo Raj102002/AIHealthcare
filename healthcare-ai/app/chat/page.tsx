@@ -2,23 +2,17 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import {
   Send,
-  LayoutDashboard,
-  LogOut,
   Loader2,
   RefreshCw,
   Trash2,
   Headphones,
-  TestTube2,
-  NotebookPen,
   Square,
 } from "lucide-react";
 import {
   getCurrentUser,
   getUserProfile,
-  logoutUser,
   saveConversation,
   initializeParse,
 } from "@/lib/parse-client";
@@ -31,7 +25,6 @@ import UserProfilePanel from "@/components/UserProfilePanel";
 import MicButton from "@/components/MicButton";
 import TalkingAvatar, { type AvatarState } from "@/components/TalkingAvatar";
 import VoiceDisclosure from "@/components/VoiceDisclosure";
-import LowStimToggle from "@/components/LowStimToggle";
 import { useSpeechOutput } from "@/hooks/useSpeechOutput";
 import { useVoiceInput, type VoiceInputError } from "@/hooks/useVoiceInput";
 import type { Message, UserProfile } from "@/types/health";
@@ -339,11 +332,6 @@ export default function ChatPage() {
     setConversationSaved(false);
   }
 
-  async function handleLogout() {
-    await logoutUser();
-    router.replace("/");
-  }
-
   if (!profile) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -370,6 +358,7 @@ export default function ChatPage() {
     ? "thinking"
     : "idle";
   const avatarLevel = isSpeaking ? speechLevel : voiceState === "listening" ? voiceLevel : 0;
+  const isEmptyConversation = messages.length === 1 && messages[0].id === "welcome";
 
   return (
     <div className="h-screen flex flex-col bg-midnight-950 text-slate-100">
@@ -404,46 +393,18 @@ export default function ChatPage() {
         <VoiceDisclosure onDismiss={() => setShowVoiceDisclosure(false)} />
       )}
 
-      {/* Top nav */}
-      <header className="glass-panel px-4 py-2.5 flex items-center justify-between shrink-0 z-10">
+      {/* Branding strip only -- destination nav and account actions live in
+          the global AppNav (components/AppNav.tsx) right above this. Having
+          both render their own copies of Journal/Test Timing/Dashboard/Sign
+          Out was the actual cause of the colliding-nav bug, not a wrapping
+          issue within either one individually. */}
+      <header className="glass-panel px-4 py-2 flex items-center shrink-0 z-10">
         <div className="flex items-center gap-2.5">
-          <TalkingAvatar state={avatarState} level={avatarLevel} size={42} />
+          <TalkingAvatar state={avatarState} level={avatarLevel} size={36} />
           <div className="leading-tight">
             <span className="font-display font-semibold text-slate-100 tracking-tight">ClearSignal</span>
             <p className="text-[11px] text-slate-400 -mt-0.5">Aura, your health companion</p>
           </div>
-        </div>
-
-        <div className="flex items-center gap-1">
-          <Link
-            href="/journal"
-            className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-cyan-300 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
-          >
-            <NotebookPen className="w-4 h-4" />
-            <span className="hidden sm:inline">Journal</span>
-          </Link>
-          <Link
-            href="/test-context"
-            className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-cyan-300 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
-          >
-            <TestTube2 className="w-4 h-4" />
-            <span className="hidden sm:inline">Test Timing</span>
-          </Link>
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-cyan-300 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
-          >
-            <LayoutDashboard className="w-4 h-4" />
-            <span className="hidden sm:inline">Dashboard</span>
-          </Link>
-          <LowStimToggle />
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-red-400 px-3 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            <span className="hidden sm:inline">Sign Out</span>
-          </button>
         </div>
       </header>
 
@@ -452,23 +413,16 @@ export default function ChatPage() {
         {/* Sidebar — a column of floating glass widgets rather than a flush
             bordered panel, matching the "floating AR dashboard" direction. */}
         <aside className="hidden lg:flex flex-col w-72 overflow-y-auto scrollbar-thin p-3 gap-3 shrink-0">
-          <div className="glass-panel rounded-2xl p-3.5">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-              Signed in as
-            </p>
-            <p className="text-sm font-medium text-slate-100">{profile.username}</p>
-          </div>
+          {(profile.email || profile.username) && (
+            <div className="glass-panel rounded-2xl p-3.5">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                Signed in as
+              </p>
+              <p className="text-sm font-medium text-slate-100 truncate">{profile.email || profile.username}</p>
+            </div>
+          )}
 
-          <UserProfilePanel
-            profile={profile}
-            onUpdated={(updated) =>
-              setProfile((prev) => prev ? { ...prev, ...updated } : prev)
-            }
-          />
-
-          <HealthLogForm prefillSymptoms={lastSymptoms} />
-
-          <div className="mt-auto space-y-2 glass-panel rounded-2xl p-3">
+          <div className="space-y-2 glass-panel rounded-2xl p-3">
             <button
               onClick={handleSaveConversation}
               className="w-full flex items-center justify-center gap-2 text-sm text-slate-300 hover:text-teal-300 py-2 rounded-xl hover:bg-white/5 transition-colors"
@@ -484,17 +438,24 @@ export default function ChatPage() {
             </button>
           </div>
 
-          <div className="text-xs text-slate-500 text-center pt-2 border-t border-white/10">
-            ⚕️ General wellness info only. Not medical advice.
-          </div>
+          <UserProfilePanel
+            profile={profile}
+            onUpdated={(updated) =>
+              setProfile((prev) => prev ? { ...prev, ...updated } : prev)
+            }
+          />
+
+          <HealthLogForm prefillSymptoms={lastSymptoms} />
         </aside>
 
         {/* Chat area */}
         <main className="flex flex-col flex-1 overflow-hidden">
-          <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-4">
-            <div className="max-w-2xl mx-auto">
-              {messages.length === 1 && messages[0].id === "welcome" && (
-                <div className="flex flex-col items-center text-center pt-10 pb-10">
+          <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-4 flex flex-col">
+            <div
+              className={`max-w-2xl mx-auto w-full ${isEmptyConversation ? "flex-1 flex flex-col justify-center" : ""}`}
+            >
+              {isEmptyConversation && (
+                <div className="flex flex-col items-center text-center pb-4">
                   <div className="relative">
                     <div className="absolute inset-0 rounded-full bg-teal-400/25 blur-2xl animate-glow-pulse" aria-hidden="true" />
                     <TalkingAvatar state={avatarState} level={avatarLevel} size={104} />
@@ -506,7 +467,7 @@ export default function ChatPage() {
                     I&apos;m Aura, ClearSignal&apos;s AI companion — ask about symptoms, exposure, or testing, and
                     I&apos;ll ground every answer in real CDC data, with sources and an honest confidence level.
                   </p>
-                  <div className="mt-6 flex flex-wrap justify-center gap-2 max-w-md">
+                  <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-2 w-full max-w-xl">
                     {[
                       "What does a negative Lyme test really mean?",
                       "How do I log a symptom?",
@@ -516,7 +477,7 @@ export default function ChatPage() {
                         key={suggestion}
                         type="button"
                         onClick={() => sendMessage(suggestion)}
-                        className="glass-panel rounded-full px-3.5 py-2 text-xs text-slate-200 hover:text-teal-300 hover:glow-ring-teal transition-all"
+                        className="glass-panel rounded-xl px-3.5 py-2.5 text-xs text-slate-200 hover:text-teal-300 hover:glow-ring-teal transition-all text-center"
                       >
                         {suggestion}
                       </button>
@@ -545,28 +506,27 @@ export default function ChatPage() {
             </div>
           </div>
 
-          {/* Disclaimer bar — deliberately kept solid and high-contrast, not
-              glassed/faded, regardless of the rest of the redesign: this is
-              a safety-relevant statement, not decorative chrome. */}
-          <div className="bg-amber-900 border-t border-amber-600/40 px-4 py-1.5 flex items-center justify-center gap-3 text-center text-xs text-amber-100">
-            <span>⚕️ This AI provides general information only — not a substitute for professional medical advice.</span>
-            {voiceStatus && (
+          {/* Voice status — only rendered while actually relevant, not a
+              permanent bar. The one standing disclaimer line lives once,
+              under the composer (below), instead of duplicated here too. */}
+          {voiceStatus && (
+            <div className="glass-panel border-x-0 px-4 py-1.5 flex items-center justify-center gap-3 text-xs">
               <span className="flex items-center gap-1.5 text-teal-300 font-medium shrink-0">
                 <TalkingAvatar state={avatarState} level={avatarLevel} size={18} />
                 {voiceStatus}
               </span>
-            )}
-            {isSpeaking && (
-              <button
-                type="button"
-                onClick={stopSpeaking}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-500/25 hover:bg-red-500/35 text-red-100 font-semibold shrink-0 transition-colors"
-              >
-                <Square className="w-3 h-3" fill="currentColor" />
-                Stop
-              </button>
-            )}
-          </div>
+              {isSpeaking && (
+                <button
+                  type="button"
+                  onClick={stopSpeaking}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-500/25 hover:bg-red-500/35 text-red-100 font-semibold shrink-0 transition-colors"
+                >
+                  <Square className="w-3 h-3" fill="currentColor" />
+                  Stop
+                </button>
+              )}
+            </div>
+          )}
 
           {voiceError && (
             <div className="bg-red-900 border-t border-red-600/40 px-4 py-1.5 text-center text-xs text-red-100" role="alert">
@@ -638,6 +598,10 @@ export default function ChatPage() {
                   </button>
                 </div>
               </div>
+
+              <p className="text-center text-[11px] text-slate-500 mt-2.5">
+                ⚕️ General information only — not a substitute for professional medical advice.
+              </p>
 
               {/* Mobile quick actions */}
               <div className="flex gap-2 mt-2 lg:hidden">
