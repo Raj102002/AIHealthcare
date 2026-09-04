@@ -60,6 +60,7 @@ along the way:
 | `/contested-territory` | Patients researching PTLDS/"chronic Lyme" usually get only one side of a genuinely contested clinical question. |
 | `/providers` | Provider/trial lookup by specialty and location — never ranked by fit, which isn't this app's judgment to make. |
 | Low-stimulation mode | Light sensitivity and cognitive fatigue are common in this population. |
+| `/vestibular-screening` (`vestibular-ai/`) | Vestibular/neurological symptoms (dizziness, nystagmus) are common and hard to describe in an appointment; this runs a vendored eye-tracking pipeline over an uploaded video and pattern-matches it against literature-described nystagmus signatures — descriptive, not diagnostic, and needs a local Python runtime (see `docs/deployment.md` §7). |
 
 **The Pfizer/Valneva vaccine candidate (PF-07307405)**, if approved, prevents new
 infections. It does nothing for people already sick, and it does not fix the test.

@@ -146,7 +146,40 @@ aggregation. This was exercised live against the dev server this pass (real
 Back4App writes, real p50/p95 computed from them), not just built and
 assumed correct.
 
-## 7. Known gaps in this deployment story — stated plainly
+## 7. Vestibular screening (`/vestibular-screening`) — Python dependency, Netlify-incompatible
+
+`app/api/vestibular-screening/route.ts` shells out to `vestibular-ai/run_screening.py`
+(the vendored [vestibular-ai](../vestibular-ai/README.md) pupil-detection/
+nystagmus-characterization/disorder-screening pipeline — PyTorch, OpenCV,
+MediaPipe) rather than calling an HTTP model API like every other analysis
+route in this app. That only works where a Python interpreter with
+`vestibular-ai/requirements.txt` installed is reachable on the same machine
+running `node`:
+
+```bash
+cd vestibular-ai
+pip install -r requirements.txt
+cd ..
+npm run dev
+# optional: set VESTIBULAR_PYTHON if `python3`/`python` isn't the right binary
+```
+
+- **Local dev**: works once the step above is done.
+- **Docker**: the `node:20-alpine` runtime image has no Python at all — the
+  route will 501 in a container built from the current `Dockerfile` until a
+  Python+CV stage is added to it (real follow-up work, not done here — these
+  are heavy, slow-to-build dependencies (`torch`, `opencv-contrib-python`,
+  `mediapipe`) that don't belong in the default image without a deliberate
+  decision to accept the size/build-time cost).
+- **Netlify (production)**: no Python runtime exists in a Netlify Function at
+  all. The route detects this (an `ENOENT` trying every candidate in
+  `VESTIBULAR_PYTHON`/`python3`/`python`) and returns a 501 with an
+  explanatory message instead of crashing — the same graceful-degradation
+  pattern `/api/rash-analysis` uses when `GROQ_VISION_MODEL` is unset. In
+  other words: this feature is real and runnable, but not yet reachable on
+  the deployed `healwithaura.netlify.app` site.
+
+## 8. Known gaps in this deployment story — stated plainly
 
 - **No health-check endpoint.** There is no `/api/health` or `/healthz`
   route. Docker's implicit "container is up" and Netlify's own function

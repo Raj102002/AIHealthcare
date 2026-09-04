@@ -161,12 +161,13 @@ If the conversation has produced a useful picture — exposure, timeline, sympto
  * before pinning an id. Constraints to design around: 5 images max per request,
  * 20MB request ceiling for URL inputs, and each image bills as roughly 2048 tokens.
  *
- * Not wired to a route yet — ClearSignal's Rash Photos tab is intentionally a
- * dated photo log with no image classification (see plan.md's scope note: EM
- * is diagnostic via expansion over days, which a single photo can't show, and
- * a wrong read here is a real safety risk). This prompt is here so a future
- * vision integration doesn't start from a blank page, not because the feature
- * is live.
+ * Wired to app/api/rash-analysis/route.ts once GROQ_VISION_MODEL
+ * (lib/models.ts) is set to an actual enabled model id — that route returns
+ * 501 until then. The Rash Photos tab's dated-photo-log design stays the
+ * primary signal regardless (EM is diagnostic mainly via expansion over
+ * days, which a single photo can't show); this prompt's own rules (never
+ * rule Lyme out, never declare it Lyme) are what keep a single-photo
+ * analysis from being a safety risk once it is wired up.
  */
 export function buildVisionSystemPrompt(): string {
   return `You are looking at a photo a person uploaded, likely of a skin rash, a tick, or a bite site, inside a Lyme disease support tool.

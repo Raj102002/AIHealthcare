@@ -24,6 +24,14 @@ export const GROQ_RERANK_MODEL = "openai/gpt-oss-120b";
 export const GROQ_REWRITE_MODEL = "openai/gpt-oss-20b";
 export const GROQ_TRANSCRIBE_MODEL = "whisper-large-v3-turbo";
 export const GROQ_TTS_MODEL = "playai-tts";
+// Confirmed via GET /openai/v1/models on 2026-08-28 that this account has NO
+// vision-capable model enabled (no Llama vision variant, no llava — only
+// text-only gpt-oss/Qwen/Whisper/TTS). Left blank rather than guessing a
+// model ID, since a wrong guess here fails exactly the same "model_not_found"
+// way documented above. app/api/rash-analysis/route.ts checks this is
+// non-empty before calling Groq and returns a clear 501 otherwise. Fill in
+// once a vision model is enabled on console.groq.com for this API key.
+export const GROQ_VISION_MODEL = "";
 
 // GPT-OSS models are reasoning models: they spend part of `max_tokens` on an
 // internal "reasoning" pass (delivered in a separate `delta.reasoning`

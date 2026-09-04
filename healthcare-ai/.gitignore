@@ -41,3 +41,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# vestibular-ai (vendored Python pipeline, see docs/deployment.md §7)
+vestibular-ai/**/__pycache__/
+vestibular-ai/**/*.pyc
+vestibular-ai/.venv/

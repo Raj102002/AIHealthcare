@@ -155,6 +155,12 @@ export const journalAgentRequestSchema = z.object({
   }),
 });
 
+export const rashAnalysisRequestSchema = z.object({
+  imageUrl: z.string().url().max(2000),
+  note: z.string().max(500).optional(),
+  occurredAt: z.string(),
+});
+
 export const chatInsightsRequestSchema = z.object({
   conversations: z
     .array(

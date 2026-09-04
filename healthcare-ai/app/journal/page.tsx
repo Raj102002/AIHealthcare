@@ -21,6 +21,7 @@ import {
   Trash2,
   Sparkles,
   Send,
+  AlertTriangle,
 } from "lucide-react";
 import { getCurrentUser, logoutUser, initializeParse } from "@/lib/parse-client";
 import LowStimToggle from "@/components/LowStimToggle";
@@ -52,6 +53,7 @@ import type {
   AnchorType,
 } from "@/types/journal";
 import { FUNCTION_DOMAIN_LABELS, ANCHOR_TYPE_LABELS } from "@/types/journal";
+import type { CitedSource } from "@/types/rag";
 
 type Tab = "symptoms" | "function" | "anchors" | "encounters" | "rash" | "exposure" | "ask";
 
@@ -738,6 +740,11 @@ function EncountersTab() {
 
 // ---- Rash Photos ----
 
+type RashAnalysisState =
+  | { status: "loading" }
+  | { status: "done"; analysis: string; sources: CitedSource[] }
+  | { status: "error"; message: string };
+
 function RashTab() {
   const [photos, setPhotos] = useState<RashPhotoRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -745,6 +752,25 @@ function RashTab() {
   const [occurredAt, setOccurredAt] = useState(todayIso());
   const [note, setNote] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [analyses, setAnalyses] = useState<Record<string, RashAnalysisState>>({});
+
+  async function handleAnalyze(p: RashPhotoRecord) {
+    if (!p.objectId) return;
+    setAnalyses((prev) => ({ ...prev, [p.objectId!]: { status: "loading" } }));
+    try {
+      const res = await fetch("/api/rash-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: p.url, note: p.note, occurredAt: p.occurredAt }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to analyze photo");
+      setAnalyses((prev) => ({ ...prev, [p.objectId!]: { status: "done", analysis: data.analysis, sources: data.sources ?? [] } }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to analyze photo";
+      setAnalyses((prev) => ({ ...prev, [p.objectId!]: { status: "error", message } }));
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -778,8 +804,9 @@ function RashTab() {
     <div className="space-y-4">
       <Card>
         <p className="text-xs text-slate-500 mb-3">
-          A daily photo with a reference object for scale. No image analysis happens here — this is just a dated
-          sequence, which is what makes an expanding rash visible. Photograph, don&apos;t interpret.
+          A daily photo with a reference object for scale. The dated sequence itself is what makes an expanding rash
+          visible — optionally, &quot;Analyze&quot; gives a grounded visual description of a single photo, but it never
+          rules Lyme in or out. A single photo can&apos;t show expansion, which is what actually matters.
         </p>
         <form onSubmit={handleSubmit} className="space-y-3">
           <Field label="Photo">
@@ -804,29 +831,81 @@ function RashTab() {
       {loading ? (
         <Loader2 className="w-5 h-5 animate-spin text-teal-600 mx-auto" />
       ) : (
-        <div className="flex gap-3 overflow-x-auto pb-2">
-          {photos.map((p) => (
-            <div key={p.objectId} className="shrink-0 w-32">
-              {/* eslint-disable-next-line @next/next/no-img-element -- Parse.File URLs are dynamic/external, next/image's optimizer isn't applicable here */}
-              <img src={p.url} alt={`Rash photo ${new Date(p.occurredAt).toLocaleDateString()}`} className="w-32 h-32 object-cover rounded-xl border border-slate-200" />
-              <div className="flex items-center justify-between mt-1">
-                <p className="text-xs text-slate-500">{new Date(p.occurredAt).toLocaleDateString()}</p>
-                <button
-                  type="button"
-                  aria-label="Delete this photo"
-                  onClick={async () => {
-                    if (!p.objectId) return;
-                    await deleteRashPhoto(p.objectId);
-                    await load();
-                  }}
-                  className="text-slate-300 hover:text-red-600 transition-colors"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          ))}
-          {photos.length === 0 && <p className="text-sm text-slate-400 text-center py-4 w-full">No photos yet.</p>}
+        <div className="space-y-3">
+          {photos.map((p) => {
+            const state = p.objectId ? analyses[p.objectId] : undefined;
+            return (
+              <Card key={p.objectId}>
+                <div className="flex gap-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- Parse.File URLs are dynamic/external, next/image's optimizer isn't applicable here */}
+                  <img src={p.url} alt={`Rash photo ${new Date(p.occurredAt).toLocaleDateString()}`} className="w-24 h-24 shrink-0 object-cover rounded-xl border border-slate-200" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-slate-500">{new Date(p.occurredAt).toLocaleDateString()}</p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleAnalyze(p)}
+                          disabled={state?.status === "loading"}
+                          className="flex items-center gap-1 text-xs px-2.5 py-1 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white rounded-lg font-medium transition-colors"
+                        >
+                          {state?.status === "loading" ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Sparkles className="w-3 h-3" />
+                          )}
+                          {state?.status === "loading" ? "Analyzing…" : state?.status === "done" ? "Re-analyze" : "Analyze"}
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Delete this photo"
+                          onClick={async () => {
+                            if (!p.objectId) return;
+                            await deleteRashPhoto(p.objectId);
+                            await load();
+                          }}
+                          className="text-slate-300 hover:text-red-600 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    {p.note && <p className="text-xs text-slate-500 mt-1">{p.note}</p>}
+
+                    {state?.status === "error" && (
+                      <div className="mt-2 flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                        <span>{state.message}</span>
+                      </div>
+                    )}
+
+                    {state?.status === "done" && (
+                      <div className="mt-2 text-sm text-slate-700 leading-relaxed bg-purple-50/50 border border-purple-100 rounded-lg px-3 py-2">
+                        <p className="whitespace-pre-wrap">{state.analysis}</p>
+                        {state.sources.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {state.sources.map((s) => (
+                              <span
+                                key={s.number}
+                                className="text-[11px] text-slate-500 bg-white border border-slate-200 rounded-full px-2 py-0.5"
+                              >
+                                {s.source_name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <p className="text-[11px] text-slate-400 mt-2 pt-2 border-t border-purple-100">
+                          ⚕️ A visual description only, not a diagnosis. Expansion over several days — which no single photo
+                          can show — is what actually matters. Always bring this to a clinician.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
+          {photos.length === 0 && <p className="text-sm text-slate-400 text-center py-4">No photos yet.</p>}
         </div>
       )}
     </div>

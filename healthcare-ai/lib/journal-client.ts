@@ -176,9 +176,12 @@ export async function saveClinicalEncounter(data: Omit<ClinicalEncounter, "objec
 }
 
 // ---- RashPhoto ----
-// Erythema migrans is diagnostic on its own via its expansion over days — no
-// image classification here, ever. Just a dated sequence the patient captured,
-// rendered as a timeline in the handoff document.
+// Erythema migrans is diagnostic mainly via its expansion over days, which no
+// single photo can show — the dated sequence itself, rendered as a timeline
+// in the handoff document, is the real signal. app/api/rash-analysis/route.ts
+// optionally adds a grounded visual description of one photo on request
+// (lib/prompts/aura.ts's buildVisionSystemPrompt()), but it never rules Lyme
+// in or out — see that prompt's docblock for why.
 
 export interface RashPhotoRecord {
   objectId?: string;

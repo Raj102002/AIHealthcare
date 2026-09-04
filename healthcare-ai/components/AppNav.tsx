@@ -16,6 +16,7 @@ import {
   LayoutDashboard,
   ChevronDown,
   LogOut,
+  Eye,
 } from "lucide-react";
 import { getCurrentUser, initializeParse, logoutUser } from "@/lib/parse-client";
 import LowStimToggle from "@/components/LowStimToggle";
@@ -36,6 +37,7 @@ const MORE = [
   { href: "/handoff", label: "Clinician Summary", icon: FileText },
   { href: "/sources", label: "Sources", icon: BookMarked },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/vestibular-screening", label: "Vestibular Screening", icon: Eye },
   { href: "/scope", label: "What this can/cannot do", icon: Info },
 ];
 

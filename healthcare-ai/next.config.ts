@@ -27,6 +27,12 @@ const nextConfig: NextConfig = {
     // can't see statically, so it has to be force-included.
     "/api/chat": ["./data/corpus.json"],
     "/api/exposure": ["./data/corpus.json"],
+    // vestibular-ai/run_screening.py is invoked as an external subprocess
+    // (child_process.execFile), which Next's tracer has no way to follow --
+    // without this the Python source and trained model files would be left
+    // out of the Docker standalone bundle. Irrelevant on Netlify (no Python
+    // runtime there regardless; see the route's own comment).
+    "/api/vestibular-screening": ["./vestibular-ai/**"],
   },
   async headers() {
     return [
